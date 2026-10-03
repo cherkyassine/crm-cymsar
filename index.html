@@ -376,7 +376,7 @@ async function ocrFill(){
     const set=(k,v,force)=>{const el=form.elements[k];if(el&&v&&(force||!+el.value&&!el.value||el.value==='0'))el.value=v};
     set('ht',j.ht);set('tva',j.tva);set('ttc',j.ttc);set('date',j.date,true);set('numero',j.numero);
     const c=S.contacts.find(c=>c.ice&&j.ices.includes(c.ice));if(c)form.elements.fournisseur.value=c.id;
-    st.innerHTML=(j.ttc?`Champs pré-remplis (lecture ${j.confiance>=80?'<b style="color:var(--ok)">fiable</b>':j.confiance>=45?'<b style="color:var(--warn)">moyenne</b>':'<b style="color:var(--bad)">incertaine</b>'}) : <b>vérifiez</b> avant d’enregistrer.`:'Rien de fiable détecté.')+(c?'':(j.ices.length?' Fournisseur inconnu (ICE '+j.ices[0]+') : créez-le dans Contacts.':''));
+    st.innerHTML=(j.ttc?`Champs pré-remplis (lecture ${j.confiance>=80?'<b style="color:var(--ok)">fiable</b>':j.confiance>=45?'<b style="color:var(--warn)">moyenne</b>':'<b style="color:var(--bad)">incertaine</b>'}) : <b>vérifiez</b> avant d’enregistrer.`:'Rien de fiable détecté'+(j.source?' (lu par '+esc(j.source)+')':'')+(j.diag&&j.diag.length?' – '+esc(j.diag.join(' | ')):'')+'. Saisissez les montants à la main.')+(c?'':(j.ices.length?' Fournisseur inconnu (ICE '+j.ices[0]+') : créez-le dans Contacts.':''));
   }catch(e){st.textContent='Lecture impossible.'}
 }
 function editInvoice(id){

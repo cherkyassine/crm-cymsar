@@ -316,19 +316,28 @@ function exportPieces(){
 }
 
 /* ================= DÉPENSE RAPIDE (photo) ================= */
+function qxInput(){ // champ fichier permanent dans la page : fiable sur téléphone (le navigateur peut se recharger pendant la prise de vue)
+  let i=document.getElementById('qx');
+  if(!i){i=document.createElement('input');i.type='file';i.id='qx';i.accept='image/*,application/pdf';i.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';i.onchange=qxChange;document.body.appendChild(i)}
+  return i;
+}
 function quickExpense(){
   if(!SERVER){alert('La photo de facture nécessite le serveur : lancez « Lancer le CRM.bat » (voir Paramètres pour l’utiliser sur téléphone).');return}
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';inp.setAttribute('capture','environment');
-  inp.onchange=async()=>{
-    const f=inp.files[0];if(!f)return;
-    const nums=[...S.invoices.map(i=>i.id),...(pendingInvoices?pendingInvoices().map(i=>i.id):[])].map(x=>+(x.match(/(\d+)$/)||[0,0])[1]);
-    const id='A-'+String(Math.max(0,...nums)+1).padStart(3,'0'),ext=(f.name.match(/\.[A-Za-z0-9]+$/)||['.jpg'])[0];
-    document.getElementById('main').insertAdjacentHTML('afterbegin','<div class="banner" id="upl">Envoi de la photo…</div>');
-    try{const r=await fetch('/api/upload?kind=achat&name='+encodeURIComponent('FA '+id+' photo'+ext),{method:'POST',body:f});const j=await r.json();
-      document.getElementById('upl')?.remove();if(j.path){await loadScan();newInvoice({id,fichier:j.path},true)}else alert('Envoi impossible.')}
-    catch(e){alert('Envoi impossible.')}
-  };
-  inp.click();
+  if(window.ME&&window.ME.role==='lecture'){alert('Accès en lecture seule.');return}
+  const i=qxInput();i.value='';i.click();
+}
+async function qxChange(ev){
+  const inp=ev.target,f=inp.files&&inp.files[0];if(!f)return;
+  const nums=[...S.invoices.map(i=>i.id),...(typeof pendingInvoices==='function'?pendingInvoices().map(i=>i.id):[])].map(x=>+(x.match(/(\d+)$/)||[0,0])[1]);
+  const id='A-'+String(Math.max(0,...nums)+1).padStart(3,'0'),ext=(f.name.match(/\.[A-Za-z0-9]+$/)||['.jpg'])[0];
+  flash('1/3 Envoi de la photo vers Google Drive… ('+Math.round(f.size/1024)+' Ko)');
+  let j;
+  try{const r=await fetch('/api/upload?kind=achat&name='+encodeURIComponent('FA '+id+' photo'+ext),{method:'POST',body:f});j=await r.json()}
+  catch(err){flash('Envoi impossible : '+(err.message||err)+'\nVérifiez la connexion Internet.','bad');return}
+  if(!j.path){flash('Envoi refusé : '+(j.error||'réponse inattendue du script Google')+(/ROOT_ID|introuvable/i.test(j.error||'')?'\n→ vérifiez la propriété ROOT_ID du script (dossier CYMSAR).':/auth/i.test(j.error||'')?'\n→ code d’accès refusé : reconnectez-vous.':'')+'.','bad');return}
+  flash('2/3 Photo enregistrée : '+j.path+'\nOuverture de la facture, lecture automatique en cours…','ok');
+  if(!window.WEB){try{await loadScan()}catch(_){}}
+  newInvoice({id,fichier:j.path},true);
 }
 
 /* ================= PARAMÈTRES : serveur ================= */
