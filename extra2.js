@@ -235,3 +235,20 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch()}
   else if(e.key==='/'&&!typing){e.preventDefault();openSearch()}
 });
+
+/* ---------- fusion automatique en cas de modification simultanée ---------- */
+async function resolveConflict(){
+  try{
+    if(!window.__base||typeof mergeData!=='function')return false;
+    const theirs=await (await fetch('/api/data'+PQ(),{cache:'no-store'})).json();
+    if(!theirs||!theirs.invoices)return false;
+    const {data,conflicts}=mergeData(window.__base,clone(S),theirs);
+    S=data;ensure();S._v=theirs._v;auditInit();
+    window.__base=clone(theirs);
+    await push();
+    render();
+    const msg=conflicts?`Fusion automatique : ${conflicts} champ(s) modifié(s) des deux côtés ; votre version a été retenue (voir Historique).`:'Les modifications faites sur un autre appareil ont été fusionnées avec les vôtres.';
+    document.getElementById('main').insertAdjacentHTML('afterbegin','<div class="banner" style="background:var(--blue-soft);color:var(--blue)">'+msg+'</div>');
+    return true;
+  }catch(e){return false}
+}

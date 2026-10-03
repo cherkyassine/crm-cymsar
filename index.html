@@ -113,9 +113,13 @@ svg text{fill:var(--mute);font-size:11px}
 </div>
 <button id="fab" onclick="quickExpense()" title="Photographier une facture">📷</button>
 <div id="modal"></div>
+<script src="parsers.js"></script>
+<script src="merge.js"></script>
+<script src="xlsxlite.js"></script>
 <script src="web.js"></script>
 <script src="extra.js"></script>
 <script src="extra2.js"></script>
+<script src="exports.js"></script>
 <script>
 "use strict";
 /* ============ état ============ */
@@ -142,10 +146,12 @@ async function push(){
     const r=await fetch('/api/data'+PQ(),{method:'PUT',body:JSON.stringify(S)});
     if(r.status===409){
       const j=await r.json();
+      if(typeof resolveConflict==='function'&&await resolveConflict(j.v))return;
       if(confirm('Ces données ont été modifiées depuis un autre appareil.\n\nOK = écraser avec CETTE version\nAnnuler = recharger la version la plus récente (vos dernières modifications ici seront perdues)')){window.__forceSave=true;S._v=j.v;await push();window.__forceSave=false}
       else location.reload();
       return;
     }
+    if(r.ok)window.__base=JSON.parse(JSON.stringify(S));
     setStatus(r.ok?'ok':'err');
   }catch(e){setStatus('err')}
 }
@@ -160,7 +166,7 @@ async function boot(){
       if(r.ok){SERVER=true;
         if(typeof bootX==='function')await bootX();
         const d=await fetch('/api/data'+PQ(),{cache:'no-store'});
-        if(d.ok){const j=await d.json();if(j&&j.invoices){S=j;ensure()}}
+        if(d.ok){const j=await d.json();if(j&&j.invoices){S=j;ensure();window.__base=JSON.parse(JSON.stringify(S))}}
         if(window.WEB)loadScan().then(()=>render());else await loadScan();
       }
     }catch(e){}
@@ -370,7 +376,7 @@ async function ocrFill(){
     const set=(k,v,force)=>{const el=form.elements[k];if(el&&v&&(force||!+el.value&&!el.value||el.value==='0'))el.value=v};
     set('ht',j.ht);set('tva',j.tva);set('ttc',j.ttc);set('date',j.date,true);set('numero',j.numero);
     const c=S.contacts.find(c=>c.ice&&j.ices.includes(c.ice));if(c)form.elements.fournisseur.value=c.id;
-    st.innerHTML=(j.ttc?'Champs pré-remplis : <b>vérifiez</b> avant d’enregistrer.':'Rien de fiable détecté.')+(c?'':(j.ices.length?' Fournisseur inconnu (ICE '+j.ices[0]+') : créez-le dans Contacts.':''));
+    st.innerHTML=(j.ttc?`Champs pré-remplis (lecture ${j.confiance>=80?'<b style="color:var(--ok)">fiable</b>':j.confiance>=45?'<b style="color:var(--warn)">moyenne</b>':'<b style="color:var(--bad)">incertaine</b>'}) : <b>vérifiez</b> avant d’enregistrer.`:'Rien de fiable détecté.')+(c?'':(j.ices.length?' Fournisseur inconnu (ICE '+j.ices[0]+') : créez-le dans Contacts.':''));
   }catch(e){st.textContent='Lecture impossible.'}
 }
 function editInvoice(id){

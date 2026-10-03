@@ -54,33 +54,20 @@ async function reduire(file){ // photos : 2000 px max, JPEG
 }
 function fileId(path){return (typeof S!=='undefined'&&S.drive&&S.drive[path])||(window.SCID&&SCID[path])||''}
 
-/* ---------- analyse des textes OCR ---------- */
-const amt=s=>parseFloat(s.replace(/[\s  ]/g,'').replace(',','.'));
-function parseInvoice(text){
-  const out={text,ices:[],amounts:[],ht:0,tva:0,ttc:0,date:'',numero:''};
-  const own=(typeof S!=='undefined'&&S.societe&&S.societe.ice)||'';
-  out.ices=[...new Set((text.match(/\b00\d{13}\b/g)||[]).filter(x=>x!==own))];
-  const am=[...new Set((text.match(/\b\d{1,3}(?:[   .]?\d{3})*[,.]\d{2}\b/g)||[]).map(amt).filter(x=>x>0))];
-  out.amounts=am;let best=null;
-  for(const ttc of am)for(const ht of am){if(ht>=ttc||ht<ttc/2)continue;const tva=Math.round((ttc-ht)*100)/100;if(am.some(x=>Math.abs(x-tva)<0.02)&&(!best||ttc>best.ttc))best={ht,tva,ttc}}
-  if(best)Object.assign(out,best);else if(am.length)out.ttc=Math.max(...am);
-  for(const d of text.match(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{4}|\d{2})\b/g)||[]){const m=d.match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4}|\d{2})/);const y=m[3].length===2?'20'+m[3]:m[3];if(+y>=2025&&+y<=2030&&+m[2]<=12&&+m[1]<=31){out.date=`${y}-${m[2]}-${m[1]}`;break}}
-  const nm=text.match(/(?:facture|invoice)\s*(?:n[°o]|num[ée]ro)?\s*[:.]?\s*([A-Z]{0,4}[\w\/-]*\d[\w\/-]*)/i)||text.match(/\b([A-Z]{2,4}\d{4}-\d{4,6})\b/)||text.match(/\b(\d{8,10})\b/);
-  if(nm)out.numero=nm[1];
-  return out;
+/* ---------- lecture des PDF dans le navigateur (pdf.js) : sans OCR quand le PDF contient du texte ---------- */
+const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+function loadPdfjs(){return window.pdfjsLib?Promise.resolve():new Promise((res,rej)=>{const s=document.createElement('script');s.src=PDFJS+'pdf.min.js';s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';res()};s.onerror=rej;document.head.appendChild(s)})}
+async function pdfText(b64){
+  await loadPdfjs();
+  const bin=atob(b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+  const doc=await pdfjsLib.getDocument({data:u}).promise,pages=[];
+  for(let i=1;i<=Math.min(doc.numPages,5);i++){const pg=await doc.getPage(i);pages.push((await pg.getTextContent()).items)}
+  return Parsers.linesFromPdfItems(pages);
 }
-function parseReleve(text){
-  const L=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  const last=l=>{const m=(l||'').match(/\d{2}\/\d{2}\/\d{4}\s+(-?\d{1,3}(?: \d{3})*,\d{2})\s*$/);return m?amt(m[1]):0};
-  const sd=L.find(l=>/SOLDE DEPART/i.test(l)),nd=L.find(l=>/NOUVEAU SOLDE/i.test(l)),debut=last(sd),fin=last(nd);
-  const em=nd&&nd.match(/(\d\d)\/(\d\d)\/(\d{4})/),endY=em?+em[3]:new Date().getFullYear(),endM=em?+em[2]:12,lignes=[];
-  for(const l of L){
-    const m=l.match(/^(\d\d)\/(\d\d)\s*(\d\d)\/(\d\d)\s+(.+?)\s+(\d{1,3}(?: \d{3})*,\d{2})$/);if(!m)continue;
-    const mo=+m[2],y=mo>endM?endY-1:endY,credit=/RECU|VERSEMENT|REMISE|CREDIT|ALIMENT|RETOUR/i.test(m[5]),a=amt(m[6]);
-    lignes.push({date:y+'-'+m[2]+'-'+m[1],label:m[5],debit:credit?0:a,credit:credit?a:0});
-  }
-  const calc=debut-lignes.reduce((s,x)=>s+x.debit,0)+lignes.reduce((s,x)=>s+x.credit,0);
-  return {debutSolde:debut,finSolde:fin,lignes,ok:lignes.length>0&&Math.abs(calc-fin)<0.02};
+const ownIce=()=>(typeof S!=='undefined'&&S.societe&&S.societe.ice)||'';
+async function lireTexte(id,preferPdf){ // texte du fichier : couche texte du PDF si elle existe, sinon OCR Google
+  if(preferPdf){try{const f=await gas('lire',{id});if(f&&f.b64&&/pdf/i.test(f.mime||'')){const t=await pdfText(f.b64);if(t.replace(/s/g,'').length>=80)return t}}catch(e){}}
+  const j=await gas('ocr',{id});if(j.error)throw new Error(j.error);return j.text;
 }
 const isGerant=l=>{const n=String((typeof S!=='undefined'&&S.societe&&S.societe.gerant)||'').split(' ').pop().toUpperCase();return !!n&&String(l).toUpperCase().includes(n)};
 function bankFromRows(rows){
@@ -134,8 +121,8 @@ window.fetch=async function(input,init){
     }
     if(path==='/api/extract'||path==='/api/releve'){
       const id=fileId(url.searchParams.get('path')||'');if(!id)return resp({error:'fichier introuvable (actualisez l’analyse du dossier)'},404);
-      const j=await gas('ocr',{id});if(j.error)return resp(j,500);
-      return resp(path==='/api/releve'?parseReleve(j.text):parseInvoice(j.text));
+      const t=await lireTexte(id,true);
+      return resp(path==='/api/releve'?Parsers.parseReleve(t):Parsers.parseInvoice(t,{ownIce:ownIce()}));
     }
     if(path==='/api/upload'&&method==='POST'){
       const kind=url.searchParams.get('kind')==='photo'?'photo':'achat',name=url.searchParams.get('name')||'fichier';
