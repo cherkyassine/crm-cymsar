@@ -1,0 +1,5 @@
+donnees*.json
+config.json
+sauvegardes/
+photos/
+*.pdf
