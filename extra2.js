@@ -45,7 +45,7 @@ async function switchProj(v){
 
 /* ---------- initialisation des données ---------- */
 function ensureX(){
-  S.audit=S.audit||[];
+  S.audit=S.audit||[];S.releves=S.releves||{};
   if(!S.budgetVersions||!S.budgetVersions.length)S.budgetVersions=[{id:'v0',nom:'Estimation initiale',date:new Date().toISOString().slice(0,10),lignes:S.budget.map(b=>({categorie:b.categorie,estime:b.estime}))}];
   S.phases.forEach(p=>{p.contrat=p.contrat||'';p.auto=p.auto||''});
 }
@@ -164,19 +164,36 @@ function acceptMatch(n,ids){
 }
 
 /* ---------- import des relevés PDF ---------- */
+function flash(msg,kind){
+  const m=document.getElementById('main');if(!m)return;
+  const old=document.getElementById('flash');if(old)old.remove();
+  const col=kind==='bad'?'var(--bad-soft);color:var(--bad)':kind==='ok'?'var(--ok-soft);color:var(--ok)':'var(--blue-soft);color:var(--blue)';
+  m.insertAdjacentHTML('afterbegin','<div class="banner" id="flash" style="background:'+col+';font-size:13px;white-space:pre-line">'+esc(msg)+'</div>');
+  window.scrollTo(0,0);
+}
 function releveBox(){
-  if(!SC||!SERVER)return '';
+  if(!SC||!SERVER)return '<div class="card" style="margin-bottom:12px"><h3>Importer un relevé bancaire (PDF)</h3><div class="small mute">Analyse du dossier indisponible : cliquez sur « Actualiser l’analyse du dossier » dans Paramètres.</div></div>';
   const files=SC.files.filter(f=>/RELEVES BANCAIRE/i.test(f.path)&&/\.pdf$/i.test(f.path)).sort((a,b)=>a.path<b.path?-1:1);
-  if(!files.length)return '';
-  return `<div class="card" style="margin-bottom:12px"><h3>Relevés bancaires PDF détectés (${files.length})</h3><div class="row">${files.map(f=>`<button class="btn sm" onclick="importReleve('${esc(f.path).replace(/'/g,"\\'")}')">${esc((f.path.match(/(\d\d-\d\d-\d{4})_(\d\d-\d\d-\d{4})/)||[f.path.split('/').pop()]).slice(1,3).join(' → ')||f.path)}</button>`).join('')}</div><div class="small mute" style="margin-top:6px">Cliquez un relevé : seules les lignes absentes du CRM seront proposées. Le solde est contrôlé avant import.</div></div>`;
+  const R=S.releves||{};
+  const lab=f=>{const m=f.path.match(/(\d\d)-(\d\d)-(\d{4})_/);return m?mlabel(m[3]+'-'+m[2]):f.path.split('/').pop()};
+  return `<div class="card" style="margin-bottom:12px"><h3>Importer un relevé bancaire (PDF)</h3>
+  <div class="small mute" style="margin-bottom:8px">Cliquez sur le mois voulu : le CRM lit le relevé, contrôle le solde, puis vous propose d’ajouter <b>seulement les lignes qui ne sont pas déjà dans la banque</b>. ${files.length?'':'Aucun relevé PDF trouvé dans les dossiers RELEVES BANCAIRE.'}</div>
+  <div class="row">${files.map(f=>{const d=R[f.path];return `<button class="btn sm ${d?'':'pri'}" onclick="importReleve('${esc(f.path).replace(/'/g,"\\'")}')">${d?'✓ ':'⬇ Importer '}${esc(lab(f))}${d?` <span class="mute">· ${d.n} lignes, à jour</span>`:''}</button>`}).join('')}</div></div>`;
 }
 async function importReleve(path){
-  let r;try{r=await (await fetch('/api/releve?path='+encodeURIComponent(path))).json()}catch(e){alert('Lecture impossible.');return}
-  if(r.error||!r.lignes){alert(r.error||'Lecture impossible.');return}
+  const nom=path.split('/').pop();
+  flash('Lecture du relevé « '+nom+' »… (quelques secondes)');
+  let r;try{r=await (await fetch('/api/releve?path='+encodeURIComponent(path))).json()}catch(e){flash('Lecture impossible : '+e.message,'bad');return}
+  if(r.error||!r.lignes){flash('Lecture impossible : '+(r.error||'réponse vide')+'.\nSi le message parle d’une action inconnue, le script Google n’est pas à jour (Déployer → Nouvelle version).','bad');return}
+  if(!r.lignes.length){flash('Aucune ligne reconnue dans ce relevé (PDF scanné ou format inattendu).','bad');return}
+  S.releves=S.releves||{};
   const nouv=dedupBank(r.lignes.map(l=>({...l})));
-  if(!nouv.length){alert('Toutes les lignes de ce relevé sont déjà dans le CRM.');return}
-  const msg=`${nouv.length} ligne(s) nouvelle(s) sur ${r.lignes.length}.\nContrôle du solde (${m2(r.debutSolde)} → ${m2(r.finSolde)}) : ${r.ok?'OK':'ÉCART – vérifiez après import'}.\n\nImporter ?`;
-  if(!confirm(msg))return;
+  if(!nouv.length){
+    S.releves[path]={n:r.lignes.length,at:new Date().toISOString().slice(0,10)};save();render();
+    flash('Ce relevé est déjà entièrement importé : '+r.lignes.length+' lignes, aucune nouvelle. Contrôle du solde : '+(r.ok?'OK':'écart à vérifier')+'.','ok');return;
+  }
+  const msg=nouv.length+' ligne(s) nouvelle(s) sur '+r.lignes.length+'.\nContrôle du solde ('+m2(r.debutSolde)+' → '+m2(r.finSolde)+') : '+(r.ok?'OK':'ÉCART – vérifiez après import')+'.\n\nImporter ?';
+  if(!confirm(msg)){flash('Import annulé.');return}
   let n=Math.max(0,...S.bank.map(b=>+b.n||0));
   nouv.forEach(l=>{
     let cat='',type='depense';
@@ -185,7 +202,9 @@ async function importReleve(path){
     else if(l.credit>0)type='neutre';
     S.bank.push({n:++n,date:l.date,label:l.label,debit:l.debit,credit:l.credit,solde:0,note:'import relevé PDF',factures:[],categorie:cat,type});
   });
+  S.releves[path]={n:r.lignes.length,at:new Date().toISOString().slice(0,10)};
   save();render();
+  flash(nouv.length+' ligne(s) ajoutée(s) à la banque. Le rapprochement avec les factures est proposé juste en dessous.','ok');
 }
 
 /* ---------- versions du budget ---------- */
