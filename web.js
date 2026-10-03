@@ -66,8 +66,24 @@ async function pdfText(b64){
 }
 const ownIce=()=>(typeof S!=='undefined'&&S.societe&&S.societe.ice)||'';
 async function lireTexte(id,preferPdf){ // texte du fichier : couche texte du PDF si elle existe, sinon OCR Google
-  if(preferPdf){try{const f=await gas('lire',{id});if(f&&f.b64&&/pdf/i.test(f.mime||'')){const t=await pdfText(f.b64);if(t.replace(/s/g,'').length>=80)return t}}catch(e){}}
-  const j=await gas('ocr',{id});if(j.error)throw new Error(j.error);return j.text;
+  const diag=[];
+  if(preferPdf){
+    try{
+      const f=await gas('lire',{id});
+      if(!f||f.error)diag.push('lire : '+((f&&f.error)||'pas de réponse du script (Code.gs pas à jour ?)'));
+      else if(!/pdf/i.test(f.mime||''))diag.push('lire : fichier de type '+f.mime);
+      else{
+        const t=await pdfText(f.b64);
+        if(t.replace(/\s/g,'').length>=80)return {text:t,source:'pdf.js',diag};
+        diag.push('pdf.js : très peu de texte ('+t.length+' caractères) – PDF image ?');
+      }
+    }catch(e){diag.push('pdf.js : '+(e.message||e))}
+  }
+  try{
+    const j=await gas('ocr',{id});
+    if(j.error){diag.push('ocr : '+j.error);return {text:'',source:'aucune',diag}}
+    return {text:j.text||'',source:'OCR Google',diag};
+  }catch(e){diag.push('ocr : '+(e.message||e));return {text:'',source:'aucune',diag}}
 }
 const isGerant=l=>{const n=String((typeof S!=='undefined'&&S.societe&&S.societe.gerant)||'').split(' ').pop().toUpperCase();return !!n&&String(l).toUpperCase().includes(n)};
 function bankFromRows(rows){
@@ -121,8 +137,16 @@ window.fetch=async function(input,init){
     }
     if(path==='/api/extract'||path==='/api/releve'){
       const id=fileId(url.searchParams.get('path')||'');if(!id)return resp({error:'fichier introuvable (actualisez l’analyse du dossier)'},404);
-      const t=await lireTexte(id,true);
-      return resp(path==='/api/releve'?Parsers.parseReleve(t):Parsers.parseInvoice(t,{ownIce:ownIce()}));
+      let L=await lireTexte(id,true),res;
+      if(path==='/api/releve'){
+        res=Parsers.parseReleve(L.text);
+        if(!res.lignes.length&&L.source==='pdf.js'){ // le texte du PDF n'a rien donné : on essaie l'OCR Google
+          const L2=await lireTexte(id,false);L2.diag=L.diag.concat(['pdf.js : aucune ligne reconnue, essai OCR Google']).concat(L2.diag);
+          const r2=Parsers.parseReleve(L2.text);res=r2;L=L2;
+        }
+      }else res=Parsers.parseInvoice(L.text,{ownIce:ownIce()});
+      res.source=L.source;res.diag=L.diag;res.apercu=String(L.text||'').split(/\r?\n/).filter(Boolean).slice(0,12).join('\n');
+      return resp(res);
     }
     if(path==='/api/upload'&&method==='POST'){
       const kind=url.searchParams.get('kind')==='photo'?'photo':'achat',name=url.searchParams.get('name')||'fichier';

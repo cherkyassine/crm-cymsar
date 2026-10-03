@@ -185,7 +185,9 @@ async function importReleve(path){
   flash('Lecture du relevé « '+nom+' »… (quelques secondes)');
   let r;try{r=await (await fetch('/api/releve?path='+encodeURIComponent(path))).json()}catch(e){flash('Lecture impossible : '+e.message,'bad');return}
   if(r.error||!r.lignes){flash('Lecture impossible : '+(r.error||'réponse vide')+'.\nSi le message parle d’une action inconnue, le script Google n’est pas à jour (Déployer → Nouvelle version).','bad');return}
-  if(!r.lignes.length){flash('Aucune ligne reconnue dans ce relevé (PDF scanné ou format inattendu).','bad');return}
+  if(!r.lignes.length){
+    flash('Aucune ligne reconnue dans ce relevé.\nSource de lecture : '+(r.source||'?')+(r.diag&&r.diag.length?'\nDétails : '+r.diag.join(' | '):'')+(r.apercu?'\n\nDébut du texte lu :\n'+r.apercu:'\n(aucun texte lu)'),'bad');return;
+  }
   S.releves=S.releves||{};
   const nouv=dedupBank(r.lignes.map(l=>({...l})));
   if(!nouv.length){
