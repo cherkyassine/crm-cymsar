@@ -355,6 +355,7 @@ function setExtra(){
   <p class="small">Mode actuel : ${SERVER?'<b style="color:var(--ok)">serveur local actif</b> (sauvegarde automatique dans le Drive, analyse du dossier, lecture des factures)':'<b style="color:var(--bad)">fichier ouvert directement</b> – fonctions limitées'}.</p>
   <p class="small mute">Pour utiliser le CRM sur téléphone : ouvrez <code>CRM\\config.json</code>, mettez <code>"lan": true</code> et choisissez un <code>"code"</code> d’accès, puis relancez « Lancer le CRM.bat ». L’adresse à saisir sur le téléphone (même Wi-Fi) s’affiche dans la fenêtre noire.</p>
   ${SERVER?'<button class="btn" onclick="loadScan().then(render)">Actualiser l’analyse du dossier</button>':''} ${window.WEB?'<button class="btn" onclick="webLogout()">Se déconnecter</button>':''}</div>
+  <div class="card"><h3>Ajouter des éléments (fichier JSON)</h3><p class="small mute">Ajoute au CRM des entrées de journal, contacts ou tâches préparées dans un fichier, <b>sans rien écraser</b>. Les éléments déjà présents sont ignorés.</p><label class="btn">Choisir un fichier<input type="file" accept=".json,application/json" style="display:none" onchange="mergeImport(this)"></label></div>
   <div class="card"><h3>Sauvegardes</h3><p class="small mute">Une copie datée de <code>donnees.json</code> est conservée chaque jour dans <code>CRM\\sauvegardes</code> (60 jours).</p></div>`;
 }
 

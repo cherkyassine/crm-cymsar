@@ -273,3 +273,31 @@ async function resolveConflict(){
     return true;
   }catch(e){return false}
 }
+
+
+/* ---------- ajout d'éléments depuis un fichier JSON (fusion, rien n'est écrasé) ---------- */
+const MERGE_OK=['journal','contacts','tasks','prospects','previsions','docs'];
+function mergeImport(inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  if(window.ME&&window.ME.role==='lecture'){alert('Accès en lecture seule.');inp.value='';return}
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result),plan=[];let nouveaux=0,deja=0;
+      for(const k of MERGE_OK){
+        if(!Array.isArray(d[k]))continue;
+        S[k]=S[k]||[];
+        const items=d[k].filter(o=>o&&o.id!=null&&!S[k].some(y=>y.id===o.id));
+        deja+=d[k].length-items.length;nouveaux+=items.length;
+        if(items.length)plan.push([k,items]);
+      }
+      if(!nouveaux){flash(deja?'Rien à ajouter : ces éléments sont déjà dans le CRM ('+deja+').':'Fichier sans élément reconnu (journal, contacts, tâches…).',deja?'ok':'bad');return}
+      if(!confirm(nouveaux+' élément(s) à ajouter'+(deja?' ('+deja+' déjà présent(s), ignorés)':'')+' :\n'+plan.map(([k,it])=>'• '+k+' : '+it.length).join('\n')+'\n\nAjouter ? Rien d’existant ne sera modifié.'))return;
+      plan.forEach(([k,items])=>items.forEach(o=>S[k].push(o)));
+      save();render();
+      flash(nouveaux+' élément(s) ajouté(s).'+(plan.some(p=>p[0]==='journal')?' Ils apparaissent dans Chantier → Journal de chantier.':''),'ok');
+    }catch(err){flash('Fichier invalide : '+(err.message||'JSON illisible')+'.','bad')}
+    inp.value='';
+  };
+  r.readAsText(f);
+}
