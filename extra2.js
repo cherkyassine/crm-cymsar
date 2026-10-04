@@ -275,29 +275,56 @@ async function resolveConflict(){
 }
 
 
-/* ---------- ajout d'éléments depuis un fichier JSON (fusion, rien n'est écrasé) ---------- */
-const MERGE_OK=['journal','contacts','tasks','prospects','previsions','docs'];
+/* ---------- ajout d'éléments depuis un fichier JSON (fusion : rien d'existant n'est écrasé, sauf les estimations du budget si le fichier en contient) ---------- */
+const MERGE_ID=['journal','contacts','tasks','prospects','previsions','docs','invoices','budgetVersions'];
 function mergeImport(inp){
   const f=inp.files&&inp.files[0];if(!f)return;
   if(window.ME&&window.ME.role==='lecture'){alert('Accès en lecture seule.');inp.value='';return}
   const r=new FileReader();
   r.onload=()=>{
     try{
-      const d=JSON.parse(r.result),plan=[];let nouveaux=0,deja=0;
-      for(const k of MERGE_OK){
+      const d=JSON.parse(r.result),plan=[],lines=[];let nouveaux=0,deja=0;
+      for(const k of MERGE_ID){
         if(!Array.isArray(d[k]))continue;
         S[k]=S[k]||[];
         const items=d[k].filter(o=>o&&o.id!=null&&!S[k].some(y=>y.id===o.id));
         deja+=d[k].length-items.length;nouveaux+=items.length;
-        if(items.length)plan.push([k,items]);
+        if(items.length){plan.push({k,items});lines.push('• '+k+' : '+items.length+' à ajouter'+(d[k].length-items.length?' ('+(d[k].length-items.length)+' déjà présent(s), ignoré(s))':''))}
       }
-      if(!nouveaux){flash(deja?'Rien à ajouter : ces éléments sont déjà dans le CRM ('+deja+').':'Fichier sans élément reconnu (journal, contacts, tâches…).',deja?'ok':'bad');return}
-      if(!confirm(nouveaux+' élément(s) à ajouter'+(deja?' ('+deja+' déjà présent(s), ignorés)':'')+' :\n'+plan.map(([k,it])=>'• '+k+' : '+it.length).join('\n')+'\n\nAjouter ? Rien d’existant ne sera modifié.'))return;
-      plan.forEach(([k,items])=>items.forEach(o=>S[k].push(o)));
+      // lignes de banque : ajoutées seulement si absentes (même date, même montant)
+      let bankNew=[];
+      if(Array.isArray(d.bank)){
+        bankNew=dedupBank(d.bank.map(b=>({...b})));
+        deja+=d.bank.length-bankNew.length;
+        if(bankNew.length){nouveaux+=bankNew.length;lines.push('• banque : '+bankNew.length+' ligne(s) à ajouter, débit total '+m2(sum(bankNew,b=>b.debit))+(d.bank.length-bankNew.length?' ('+(d.bank.length-bankNew.length)+' déjà présente(s))':''))}
+      }
+      // budget : mise à jour des estimations par catégorie
+      const bud=[];
+      if(Array.isArray(d.budget)){
+        d.budget.forEach(b=>{if(!b||!b.categorie)return;const cur=S.budget.find(x=>x.categorie===b.categorie);
+          if(!cur)bud.push({b,old:null});else if(Math.abs((+cur.estime||0)-(+b.estime||0))>0.004||(b.note&&b.note!==cur.note))bud.push({b,old:cur})});
+        if(bud.length){nouveaux+=bud.length;
+          const tOld=sum(S.budget,x=>x.estime),tNew=tOld+sum(bud,e=>(+e.b.estime||0)-(e.old?+e.old.estime||0:0));
+          lines.push('• budget : '+bud.length+' catégorie(s) modifiée(s) ; total '+m2(tOld)+' → '+m2(tNew)+' (une version « avant mise à jour » est conservée)')}
+      }
+      if(!nouveaux){flash(deja?'Rien à ajouter : tout est déjà dans le CRM ('+deja+' élément(s)).':'Fichier sans élément reconnu.',deja?'ok':'bad');inp.value='';return}
+      if(!confirm(nouveaux+' modification(s) :\n'+lines.join('\n')+'\n\nAppliquer ? Aucun autre élément existant ne sera modifié.')){inp.value='';return}
+      plan.forEach(({k,items})=>items.forEach(o=>S[k].push(o)));
+      if(bankNew.length){
+        let n=Math.max(0,...S.bank.map(b=>+b.n||0)),solde=S.bank.length?+S.bank[S.bank.length-1].solde||0:0;
+        bankNew.sort((p,q)=>p.date<q.date?-1:p.date>q.date?1:0).forEach(b=>{solde=Math.round((solde+(b.credit||0)-(b.debit||0))*100)/100;S.bank.push({...b,n:++n,solde})});
+      }
+      if(bud.length){
+        S.budgetVersions=S.budgetVersions||[];
+        S.budgetVersions.push({id:uid('v'),nom:'Avant mise à jour du '+fd(today()),date:today(),lignes:S.budget.map(b=>({categorie:b.categorie,estime:b.estime}))});
+        bud.forEach(({b,old})=>{if(old){old.estime=+b.estime||0;if(b.note)old.note=b.note}else S.budget.push({categorie:b.categorie,estime:+b.estime||0,note:b.note||''})});
+        S.budgetVersions.push({id:uid('v'),nom:'Mise à jour du '+fd(today())+' (Excel à jour)',date:today(),lignes:S.budget.map(b=>({categorie:b.categorie,estime:b.estime}))});
+      }
       save();render();
-      flash(nouveaux+' élément(s) ajouté(s).'+(plan.some(p=>p[0]==='journal')?' Ils apparaissent dans Chantier → Journal de chantier.':''),'ok');
+      flash(nouveaux+' modification(s) appliquée(s).'+(bankNew.length?' Allez dans Banque : le rapprochement avec les factures est proposé.':''),'ok');
     }catch(err){flash('Fichier invalide : '+(err.message||'JSON illisible')+'.','bad')}
     inp.value='';
   };
   r.readAsText(f);
 }
+
