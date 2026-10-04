@@ -415,7 +415,7 @@ function invTable(rows){
 }
 function exportCSV(){
   const h=['N°','Date','Fournisseur','N° facture','Catégorie','Désignation','HT','TVA','TTC','Payé','Date paiement','Mode','Réf'];
-  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const q=csvCell;
   const lines=[h.map(q).join(';')].concat(S.invoices.map(i=>[i.id,fd(i.date),cn(i.fournisseur),i.numero,i.categorie,i.designation,i.ht,i.tva,i.ttc,i.paye,fd(i.datePaiement),i.mode,i.refBanque].map(q).join(';')));
   download('factures_cymsar.csv','﻿'+lines.join('\r\n'),'text/csv');
 }
@@ -763,7 +763,7 @@ function editCompta(){
    onSave:o=>{o.venteTTC=o.venteTTC==='ttc';Object.assign(S.compta,o)}});
 }
 function exportJournal(){
-  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const q=csvCell;
   const L=[['Date','Pièce','Libellé','Compte','Débit','Crédit'].map(q).join(';')];
   S.invoices.slice().sort((a,b)=>a.date<b.date?-1:1).forEach(i=>{
     const lib=cn(i.fournisseur)+' '+i.numero;

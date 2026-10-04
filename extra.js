@@ -1,5 +1,14 @@
 /* Modules complémentaires du CRM CYMSAR : trésorerie, chantier, rapport, ventes avancées, compta avancée, contrôles. */
 "use strict";
+/* CSV pour Excel français : séparateur « ; », nombres avec virgule décimale, UTF-8 avec BOM */
+function csvCell(v){
+  let s;
+  if(v==null)s='';
+  else if(typeof v==='number')s=(Number.isInteger(v)?String(v):String(Math.round(v*100)/100)).replace('.',',');
+  else{s=String(v);if(/^-?\d+\.\d+$/.test(s))s=s.replace('.',',')}
+  return '"'+s.replace(/"/g,'""')+'"';
+}
+
 function FURL(p,img){
   if(window.WEB){const id=(S.drive&&S.drive[p])||(window.SCID&&SCID[p])||'';return id?(img?'https://drive.google.com/thumbnail?id='+id+'&sz=w400':'https://drive.google.com/file/d/'+id+'/view'):'#'}
   return '../'+encodeURI(p);
@@ -300,7 +309,7 @@ function cptExtra(){
   <h3 class="mute" style="margin:26px 0 8px">Exports pour l’expert-comptable</h3>
   <div class="row"><button class="btn" onclick="exportBankJournal()">Journal de banque (CSV)</button><button class="btn" onclick="exportPieces()">Liste des pièces numérotées (CSV)</button><button class="btn" onclick="exportJournal()">Journal des achats (CSV)</button></div>${typeof cptXlsxBox==='function'?cptXlsxBox():''}`;
 }
-function csv(name,rows){const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';download(name,'﻿'+rows.map(r=>r.map(q).join(';')).join('\r\n'),'text/csv')}
+function csv(name,rows){const q=csvCell;download(name,'﻿'+rows.map(r=>r.map(q).join(';')).join('\r\n'),'text/csv')}
 function exportDeductions(k){csv('releve_deductions_'+k+'.csv',[['Fournisseur','ICE','N° facture','Date facture','Date paiement','Mode','HT','TVA','TTC']].concat(deductionRows(k).map(({i,part})=>{const c=S.contacts.find(x=>x.id===i.fournisseur)||{};return [c.nom,c.ice,i.numero,fd(i.date),fd(i.datePaiement),i.mode,(i.ht*part).toFixed(2),(i.tva*part).toFixed(2),(i.ttc*part).toFixed(2)]})))}
 function exportBankJournal(){
   const rows=[['Date','N° pièce','Libellé','Compte','Débit','Crédit','Factures']];
