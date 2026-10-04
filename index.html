@@ -294,7 +294,7 @@ function vDash(){
   const unpaid=S.invoices.filter(i=>i.ttc-i.paye>0.005).sort((a,b)=>a.date<b.date?-1:1);
   const kp=(l,v,s,c='')=>`<div class="card kpi"><div class="l">${l}</div><div class="v" style="${c}">${v}</div><div class="s">${s||''}</div></div>`;
   const pct=k.budTot?Math.round(k.engTot/k.budTot*100):0;
-  const marge=k.ca-k.budTot;
+  const FF=budgetFiscal(),marge=FF.margeHT;
   const openTasks=S.tasks.filter(t=>t.statut!=='Fait').sort((a,b)=>((a.priorite==='Haute'?0:1)-(b.priorite==='Haute'?0:1))||((a.echeance||'9')<(b.echeance||'9')?-1:1)).slice(0,5);
   return `
   <div class="top"><div><h1>Tableau de bord</h1><p class="sub">${esc(S.projet.nom)} · ${esc(S.projet.commune)}</p></div>
@@ -307,7 +307,7 @@ function vDash(){
    ${kp('Dépenses payées',MAD(k.payTot),'Terrain inclus')}
    ${kp('Reste à payer (factures)',MAD(k.reste),`${unpaid.length} facture(s) en attente`,k.reste>0?'color:var(--bad)':'')}
    ${kp('Budget prévisionnel',MAD(k.budTot),'Estimations des fichiers Excel')}
-   ${kp('Marge prévisionnelle',MAD(marge),`Sur ventes potentielles de ${m0(k.ca)}`,marge<0?'color:var(--bad)':'color:var(--ok)')}
+   ${kp('Marge prévisionnelle (HT)',MAD(marge),`Ventes HT ${m0(FF.caHT)} − coûts HT ${m0(FF.coutsHT)}`,marge<0?'color:var(--bad)':'color:var(--ok)')}
    ${kp('Lots vendus',`${k.vendus} / ${S.lots.length}`,`CA signé ${m0(k.caVendu)} MAD`)}
   </div>
   <div class="grid cols2" style="margin-bottom:14px">
@@ -476,7 +476,7 @@ function editBank(i){
 function vBud(){
   const k=calc();
   const cats=S.budget.concat(Object.keys(k.eng).filter(c=>!S.budget.find(b=>b.categorie===c)).map(c=>({categorie:c,estime:0,note:'(catégorie hors budget)'})));
-  const marge=k.ca-Math.max(k.budTot,0),noir=sum(S.budget.filter(b=>b.categorie.startsWith('Prix non déclaré')),b=>b.estime),marge2=marge+noir;
+  const F=budgetFiscal(),marge=k.ca-Math.max(k.budTot,0),noir=sum(S.budget.filter(b=>b.categorie.startsWith('Prix non déclaré')),b=>b.estime),marge2=marge+noir;
   return `<div class="top"><div><h1>Budget du projet</h1><p class="sub">Estimations issues de la feuille « Frais_Acquisition_Terrain » du fichier SITUATION BANQUE CYMSAR_2026.xlsx, comparées aux dépenses réelles (factures + terrain + frais bancaires).</p></div>
   <div class="row"><button class="btn" onclick="majBudgetExcel()">⟳ Mise à jour depuis le fichier Excel</button><button class="btn pri" onclick="newBud()">+ Catégorie</button></div></div>
   <div class="grid kpis">
@@ -484,21 +484,33 @@ function vBud(){
    <div class="card kpi"><div class="l">Engagé à ce jour</div><div class="v">${MAD(k.engTot)}</div><div class="s">${k.budTot?Math.round(k.engTot/k.budTot*100):0} % du budget</div></div>
    <div class="card kpi"><div class="l">Reste à engager</div><div class="v">${MAD(k.budTot-k.engTot)}</div></div>
    <div class="card kpi"><div class="l">Ventes potentielles</div><div class="v">${MAD(k.ca)}</div></div>
-   <div class="card kpi"><div class="l">Marge prévisionnelle (tout compris)</div><div class="v" style="color:${marge<0?'var(--bad)':'var(--ok)'}">${MAD(marge)}</div><div class="s">${k.ca?dec(Math.round(marge/k.ca*1000)/10):0} % du CA</div></div>
+   <div class="card kpi"><div class="l">Marge brute (ventes − budget, sans TVA)</div><div class="v" style="color:${marge<0?'var(--bad)':'var(--ok)'}">${MAD(marge)}</div><div class="s">${k.ca?dec(Math.round(marge/k.ca*1000)/10):0} % du CA</div></div>
    <div class="card kpi"><div class="l">Marge hors prix non déclaré</div><div class="v" style="color:${marge2<0?'var(--bad)':'var(--ok)'}">${MAD(marge2)}</div><div class="s">Si les ${m0(noir)} MAD non déclarés sont exclus</div></div></div>
   </div>
-  <div class="tw"><table><thead><tr><th>Catégorie</th><th class="num">Budget</th><th class="num">Engagé</th><th class="num">Payé</th><th class="num">Écart</th><th style="width:160px">Avancement</th><th>Note</th></tr></thead><tbody>
+  <h3 class="mute" style="margin:6px 0 8px">Résultat hors taxes (TVA)</h3>
+  <div class="grid kpis">
+   <div class="card kpi"><div class="l">Ventes HT</div><div class="v">${MAD(F.caHT)}</div><div class="s">Prix de vente ${F.venteTTC?'TTC':'HT'} · TVA ${F.taux} %</div></div>
+   <div class="card kpi"><div class="l">TVA collectée sur les ventes</div><div class="v">${MAD(F.tvaCol)}</div></div>
+   <div class="card kpi"><div class="l">TVA déductible estimée</div><div class="v">${MAD(F.tvaDed)}</div><div class="s">Factures reçues + reste à engager</div></div>
+   <div class="card kpi"><div class="l">TVA nette à payer</div><div class="v" style="color:${F.tvaNette>0?'var(--bad)':'var(--ok)'}">${MAD(F.tvaNette)}</div><div class="s">Collectée − déductible</div></div>
+   <div class="card kpi"><div class="l">Coûts HT</div><div class="v">${MAD(F.coutsHT)}</div><div class="s">Budget − TVA déductible</div></div>
+   <div class="card kpi"><div class="l">Marge HT</div><div class="v" style="color:${F.margeHT<0?'var(--bad)':'var(--ok)'}">${MAD(F.margeHT)}</div><div class="s">${F.caHT?dec(Math.round(F.margeHT/F.caHT*1000)/10):0} % du CA HT</div></div>
+   <div class="card kpi"><div class="l">Marge HT hors prix non déclaré</div><div class="v" style="color:${F.margeHT2<0?'var(--bad)':'var(--ok)'}">${MAD(F.margeHT2)}</div><div class="s">Si les ${m0(F.noir)} MAD non déclarés sont exclus</div></div>
+  </div>
+  <p class="small mute" style="margin:0 0 14px">Estimation à valider avec la fiduciaire. Les taux de TVA déductible se règlent par catégorie (cliquez une ligne). La TVA réelle des factures déjà reçues est comptée telle quelle ; le taux ne s’applique qu’au reste à engager.</p>
+  <div class="tw"><table><thead><tr><th>Catégorie</th><th class="num">Budget</th><th class="num">Engagé</th><th class="num">Payé</th><th class="num">Écart</th><th style="width:130px">Avancement</th><th class="num">TVA déd.</th><th>Note</th></tr></thead><tbody>
   ${cats.map(b=>{const e=k.eng[b.categorie]||0,p=k.pay[b.categorie]||0,ec=b.estime-e,pc=b.estime?Math.min(100,e/b.estime*100):(e?100:0);
-   return `<tr class="click" onclick="editBud('${esc(b.categorie).replace(/'/g,"&#39;")}')"><td><b>${esc(b.categorie)}</b></td><td class="num">${m2(b.estime)}</td><td class="num">${m2(e)}</td><td class="num">${m2(p)}</td><td class="num" style="color:${ec<0?'var(--bad)':'inherit'}">${m2(ec)}</td><td><div class="track"><div class="fill ${ec<0&&b.estime>0?'over':''}" style="width:${pc}%"></div></div></td><td class="small mute">${esc(b.note||'')}</td></tr>`}).join('')}
-  </tbody><tfoot><tr><td>Total</td><td class="num">${m2(k.budTot)}</td><td class="num">${m2(k.engTot)}</td><td class="num">${m2(k.payTot)}</td><td class="num">${m2(k.budTot-k.engTot)}</td><td></td><td></td></tr></tfoot></table></div>
-  <p class="small mute">Le budget terrain (1 475 714 MAD) inclut le prix non déclaré de 246 000 MAD de l’Excel : il compte donc dans la marge prévisionnelle, mais pas dans l’engagé, car il n’apparaît pas dans les relevés bancaires.</p>${budExtra()}`;
+   const fl=F.lignes.find(l=>l.categorie===b.categorie)||{taux:0,tva:0};
+   return `<tr class="click" onclick="editBud('${esc(b.categorie).replace(/'/g,"&#39;")}')"><td><b>${esc(b.categorie)}</b></td><td class="num">${m2(b.estime)}</td><td class="num">${m2(e)}</td><td class="num">${m2(p)}</td><td class="num" style="color:${ec<0?'var(--bad)':'inherit'}">${m2(ec)}</td><td><div class="track"><div class="fill ${ec<0&&b.estime>0?'over':''}" style="width:${pc}%"></div></div></td><td class="num">${m2(fl.tva)}<div class="small mute">${fl.taux} %</div></td><td class="small mute">${esc(b.note||'')}</td></tr>`}).join('')}
+  </tbody><tfoot><tr><td>Total</td><td class="num">${m2(k.budTot)}</td><td class="num">${m2(k.engTot)}</td><td class="num">${m2(k.payTot)}</td><td class="num">${m2(k.budTot-k.engTot)}</td><td></td><td class="num">${m2(F.tvaDed)}</td><td></td></tr></tfoot></table></div>
+  <p class="small mute">Le prix non déclaré (ligne séparée) compte dans le budget et la marge, mais pas dans l’engagé, car il n’apparaît pas dans les relevés bancaires.</p>${budExtra()}`;
 }
-const BUDF=[{k:'categorie',l:'Catégorie',t:'text',req:1},{k:'estime',l:'Budget estimé (MAD)',t:'number'},{k:'note',l:'Note',t:'area',full:1}];
-function newBud(){openForm({title:'Nouvelle catégorie budgétaire',fields:BUDF,data:{estime:0},onSave:o=>S.budget.push(o)})}
+const BUDF=[{k:'categorie',l:'Catégorie',t:'text',req:1},{k:'estime',l:'Budget estimé (MAD)',t:'number'},{k:'tva',l:'TVA déductible sur le reste à engager (%) – 0 si aucune',t:'number'},{k:'note',l:'Note',t:'area',full:1}];
+function newBud(){openForm({title:'Nouvelle catégorie budgétaire',fields:BUDF,data:{estime:0,tva:20},onSave:o=>S.budget.push(o)})}
 function editBud(c){
   let b=S.budget.find(x=>x.categorie===c);const virt=!b;
   if(!b)b={categorie:c,estime:0,note:''};
-  openForm({title:'Budget – '+c,fields:BUDF,data:b,onSave:o=>{if(virt)S.budget.push(o);else{const old=b.categorie;Object.assign(b,o);if(old!==o.categorie){S.invoices.forEach(i=>{if(i.categorie===old)i.categorie=o.categorie});S.bank.forEach(i=>{if(i.categorie===old)i.categorie=o.categorie})}}},
+  openForm({title:'Budget – '+c,fields:BUDF,data:{...b,tva:tvaRate(b)},onSave:o=>{if(virt)S.budget.push(o);else{const old=b.categorie;Object.assign(b,o);if(old!==o.categorie){S.invoices.forEach(i=>{if(i.categorie===old)i.categorie=o.categorie});S.bank.forEach(i=>{if(i.categorie===old)i.categorie=o.categorie})}}},
    onDelete:virt?null:()=>{S.budget=S.budget.filter(x=>x!==b)}});
 }
 
@@ -724,7 +736,7 @@ function vCpt(){
   const byCat={};inv.forEach(i=>{const x=byCat[i.categorie]=byCat[i.categorie]||{ht:0,tva:0,ttc:0};x.ht+=i.ht;x.tva+=i.tva;x.ttc+=i.ttc});
   const r=C.tvaVente/100;
   const caHT=C.venteTTC?k.ca/(1+r):k.ca,caTVA=caHT*r;
-  const res=caHT-k.budTot,isEst=Math.max(0,res)*C.is/100,cm=Math.max(3000,caHT*0.0025);
+  const FB=budgetFiscal(),res=caHT-FB.coutsHT,isEst=Math.max(0,res)*C.is/100,cm=Math.max(3000,caHT*0.0025);
   const kp=(l,v,s,c='')=>`<div class="card kpi"><div class="l">${l}</div><div class="v" style="${c}">${v}</div><div class="s">${s||''}</div></div>`;
   const solde=T.credit>0?['Crédit de TVA reportable',MAD(T.credit),'color:var(--ok)']:['TVA à payer (cumul)',MAD(T.rows.length?T.rows[T.rows.length-1].due:0),'color:var(--bad)'];
   return `<div class="top"><div><h1>Comptabilité</h1><p class="sub">TVA, journal des achats et estimations fiscales. Indicatif : à valider avec la fiduciaire.</p></div>
@@ -746,12 +758,12 @@ function vCpt(){
    <p class="small mute">Les montants HT de la facture notaire (A-002) incluent les droits d’enregistrement et de conservation, non soumis à TVA : seuls les honoraires portent la TVA.</p></div>
    <div><h3 class="mute" style="margin:0 0 8px">Estimation fiscale (indicative)</h3><div class="card"><dl class="dl">
     <dt>CA HT potentiel</dt><dd>${MAD(caHT)}</dd>
-    <dt>Coûts prévus</dt><dd>${MAD(k.budTot)}</dd>
+    <dt>Coûts prévus (HT)</dt><dd>${MAD(FB.coutsHT)}</dd>
     <dt>Résultat prévisionnel</dt><dd><b style="color:${res<0?'var(--bad)':'var(--ok)'}">${MAD(res)}</b></dd>
     <dt>IS à ${C.is} %</dt><dd>${MAD(isEst)}</dd>
     <dt>Cotisation minimale</dt><dd>${MAD(cm)} <span class="mute small">(0,25 % du CA HT, min. 3 000)</span></dd>
     <dt>Impôt retenu</dt><dd><b>${MAD(Math.max(isEst,cm))}</b></dd></dl>
-    <p class="small mute" style="margin-bottom:0">Le budget est utilisé comme charges ; il n’a pas été converti en HT. À affiner avec les comptes réels.</p></div></div>
+    <p class="small mute" style="margin-bottom:0">Coûts HT = budget − TVA déductible estimée (page Budget). À affiner avec les comptes réels et la fiduciaire.</p></div></div>
   </div>
   <h3 class="mute" style="margin:22px 0 8px">TVA et HT par catégorie</h3>
   <div class="tw"><table><thead><tr><th>Catégorie</th><th>Compte suggéré</th><th class="num">HT</th><th class="num">TVA</th><th class="num">TTC</th></tr></thead><tbody>${Object.keys(byCat).map(c=>`<tr><td>${esc(c)}</td><td class="small mute">${esc(compteOf(c))}</td><td class="num">${m2(byCat[c].ht)}</td><td class="num">${m2(byCat[c].tva)}</td><td class="num">${m2(byCat[c].ttc)}</td></tr>`).join('')}</tbody></table></div>

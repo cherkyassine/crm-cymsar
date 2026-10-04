@@ -1,5 +1,26 @@
 /* Modules complémentaires du CRM CYMSAR : trésorerie, chantier, rapport, ventes avancées, compta avancée, contrôles. */
 "use strict";
+/* ---------- TVA déductible du budget et marge hors taxes ----------
+   Les montants du budget sont des montants TTC pour les postes soumis à TVA. Pour chaque catégorie :
+   TVA déductible estimée = TVA réelle des factures déjà reçues + (reste à engager × taux / (100 + taux)). */
+const R2=n=>Math.round((+n||0)*100)/100;
+const TVA_DEFAUT={'Acquisition terrain & société':0,'Prix non déclaré (hors acte)':0,'Permis & taxes':0,'Architecte, BET & contrôle':20,'Terrassement':20,'Gros œuvre':0,'Second œuvre':20,'Finitions':20,'Raccordements (eau/élec./assain.)':20,'Équipements de chantier':20,'Assurances, titres & réception':0,'Divers':0,'Frais bancaires':0};
+const tvaRate=b=>(b.tva!==undefined&&b.tva!==null&&b.tva!=='')?+b.tva:(TVA_DEFAUT[b.categorie]!==undefined?TVA_DEFAUT[b.categorie]:0);
+function budgetFiscal(){
+  const k=calc(),C=S.compta,r=(+C.tvaVente||20)/100,reelle={};
+  S.invoices.forEach(i=>{reelle[i.categorie]=(reelle[i.categorie]||0)+(+i.tva||0)});
+  const cats=S.budget.map(b=>b.categorie);Object.keys(k.eng).forEach(c=>{if(!cats.includes(c))cats.push(c)});
+  const lignes=cats.map(c=>{
+    const b=S.budget.find(x=>x.categorie===c)||{categorie:c,estime:0},taux=tvaRate(b),eng=k.eng[c]||0;
+    const reste=Math.max(0,(+b.estime||0)-eng),deja=reelle[c]||0,futur=reste*taux/(100+taux);
+    return {categorie:c,taux,deja:R2(deja),futur:R2(futur),tva:R2(deja+futur)};
+  });
+  const tvaDed=R2(sum(lignes,l=>l.tva)),coutsHT=R2(k.budTot-tvaDed);
+  const caHT=C.venteTTC?k.ca/(1+r):k.ca,tvaCol=C.venteTTC?k.ca-caHT:k.ca*r;
+  const noir=sum(S.budget.filter(b=>b.categorie.startsWith('Prix non déclaré')),b=>b.estime);
+  return {lignes,tvaDed,coutsHT,caHT:R2(caHT),tvaCol:R2(tvaCol),tvaNette:R2(tvaCol-tvaDed),margeHT:R2(caHT-coutsHT),margeHT2:R2(caHT-coutsHT+noir),noir,venteTTC:!!C.venteTTC,taux:C.tvaVente};
+}
+
 /* CSV pour Excel français : séparateur « ; », nombres avec virgule décimale, UTF-8 avec BOM */
 function csvCell(v){
   let s;
@@ -262,9 +283,9 @@ function salSim(){
 function simCalc(){
   const p=+document.getElementById('sp').value,c=+document.getElementById('sc').value,C=S.compta,k=calc();
   document.getElementById('svp').textContent=(p>0?'+':'')+p+' %';document.getElementById('svc').textContent=(c>0?'+':'')+c+' %';
-  const r=C.tvaVente/100,ca=k.ca*(1+p/100),caHT=C.venteTTC?ca/(1+r):ca,cout=k.budTot*(1+c/100),marge=caHT-cout,surf=sum(S.lots,l=>l.surface);
+  const r=C.tvaVente/100,ca=k.ca*(1+p/100),caHT=C.venteTTC?ca/(1+r):ca,cout=budgetFiscal().coutsHT*(1+c/100),marge=caHT-cout,surf=sum(S.lots,l=>l.surface);
   const be=(cout*(C.venteTTC?(1+r):1))/surf;
-  document.getElementById('simout').innerHTML=`<div class="grid kpis">${tile('CA HT',MAD(caHT))}${tile('Coûts',MAD(cout))}${tile('Marge',MAD(marge),caHT?dec(Math.round(marge/caHT*1000)/10)+' % du CA HT':'',marge<0?'color:var(--bad)':'color:var(--ok)')}${tile('Prix de vente d’équilibre',m0(be)+' MAD/m²','Marge nulle',''
+  document.getElementById('simout').innerHTML=`<div class="grid kpis">${tile('CA HT',MAD(caHT))}${tile('Coûts HT',MAD(cout),'Budget − TVA déductible estimée')}${tile('Marge',MAD(marge),caHT?dec(Math.round(marge/caHT*1000)/10)+' % du CA HT':'',marge<0?'color:var(--bad)':'color:var(--ok)')}${tile('Prix de vente d’équilibre',m0(be)+' MAD/m²','Marge nulle',''
   )}</div>`;
 }
 window.addEventListener('load',()=>{});
