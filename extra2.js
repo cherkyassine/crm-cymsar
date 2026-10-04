@@ -276,7 +276,7 @@ async function resolveConflict(){
 
 
 /* ---------- ajout d'éléments depuis un fichier JSON (fusion : rien d'existant n'est écrasé, sauf les estimations du budget si le fichier en contient) ---------- */
-const MERGE_ID=['journal','contacts','tasks','prospects','previsions','docs','invoices','budgetVersions'];
+const MERGE_ID=['journal','contacts','tasks','prospects','previsions','docs','invoices','budgetVersions','contrats'];
 function mergeImport(inp){
   const f=inp.files&&inp.files[0];if(!f)return;
   if(window.ME&&window.ME.role==='lecture'){alert('Accès en lecture seule.');inp.value='';return}
