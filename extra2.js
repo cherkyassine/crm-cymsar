@@ -102,7 +102,7 @@ function auditUndo(i){
   else{const o=S[e.c].find(o=>A.k(o)===e.key);if(!o){alert('L’élément n’existe plus.');return}Object.assign(o,clone(e.before))}
   e.undone=true;save();render();
 }
-const short=v=>{const s=typeof v==='object'?JSON.stringify(v):String(v??'');return s.length>40?s.slice(0,38)+'…':s};
+const short=v=>{const s=typeof v==='object'?JSON.stringify(v):(typeof v==='number'?dec(v):String(v??''));return s.length>40?s.slice(0,38)+'…':s};
 function vHist(){
   const f=UI.hist||(UI.hist={q:'',c:''}),q=normS(f.q);
   const all=S.audit.map((e,i)=>({e,i})).reverse().filter(({e})=>(!f.c||e.c===f.c)&&(!q||normS(e.label+' '+e.u+' '+Object.keys(e.after||{}).join(' ')).includes(q)));

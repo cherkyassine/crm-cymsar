@@ -183,6 +183,10 @@ const nf0=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
 const clean=s=>s.replace(/[  ]/g,' ');
 const m2=n=>clean(nf.format(+n||0));
 const m0=n=>clean(nf0.format(+n||0));
+/* champs numériques : affichage avec virgule, saisie acceptée avec virgule ou point */
+const fmtIn=v=>String(v??'').replace('.',',');
+function parseNum(s){s=String(s??'').trim().replace(/[\s\u00a0\u202f]/g,'');if(s==='')return 0;if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'');s=s.replace(',','.');const n=parseFloat(s);return isNaN(n)?0:n}
+const dec=x=>String(x).replace('.',',');
 const MAD=n=>m2(n)+' '+((S.projet&&S.projet.devise)||'MAD');
 const fd=d=>{if(!d)return '';const p=String(d).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d};
 const today=()=>new Date().toISOString().slice(0,10);
@@ -261,7 +265,7 @@ function openForm({title,fields,data={},onSave,onDelete,wide,extra=''}){
     let inp;
     if(x.t==='select')inp=`<select name="${x.k}">${optHtml(typeof x.o==='function'?x.o():x.o,v)}</select>`;
     else if(x.t==='area')inp=`<textarea name="${x.k}">${esc(v)}</textarea>`;
-    else if(x.t==='number')inp=`<input name="${x.k}" type="number" step="any" value="${esc(v)}">`;
+    else if(x.t==='number')inp=`<input name="${x.k}" type="text" inputmode="decimal" autocomplete="off" value="${esc(fmtIn(v))}">`;
     else if(x.t==='date')inp=`<input name="${x.k}" type="date" value="${esc(v)}">`;
     else inp=`<input name="${x.k}" type="text" value="${esc(v)}">`;
     return `<div class="${cls}"><label>${esc(x.l)}${x.req?' *':''}</label>${inp}</div>`;
@@ -271,7 +275,7 @@ function openForm({title,fields,data={},onSave,onDelete,wide,extra=''}){
   const form=modal.querySelector('form');
   form.onsubmit=e=>{e.preventDefault();
     const out={};
-    for(const x of fields){let v=form.elements[x.k].value;if(x.t==='number')v=v===''?0:+v;out[x.k]=v;
+    for(const x of fields){let v=form.elements[x.k].value;if(x.t==='number')v=parseNum(v);out[x.k]=v;
       if(x.req&&(v===''||v==null)){form.elements[x.k].focus();return}}
     onSave(out);save();closeModal();render();
   };
@@ -373,7 +377,7 @@ async function ocrFill(){
   try{
     const r=await fetch('/api/extract?path='+encodeURIComponent(path));const j=await r.json();
     if(j.error){st.textContent=j.error;return}
-    const set=(k,v,force)=>{const el=form.elements[k];if(el&&v&&(force||!+el.value&&!el.value||el.value==='0'))el.value=v};
+    const set=(k,v,force)=>{const el=form.elements[k];if(!el||!v)return;const isNum=typeof v==='number',vide=isNum?(!el.value||parseNum(el.value)===0):!el.value;if(force||vide)el.value=isNum?dec(v):v};
     set('ht',j.ht);set('tva',j.tva);set('ttc',j.ttc);set('date',j.date,true);set('numero',j.numero);
     const c=S.contacts.find(c=>c.ice&&j.ices.includes(c.ice));if(c)form.elements.fournisseur.value=c.id;
     st.innerHTML=(j.ttc?`Champs pré-remplis (lecture ${j.confiance>=80?'<b style="color:var(--ok)">fiable</b>':j.confiance>=45?'<b style="color:var(--warn)">moyenne</b>':'<b style="color:var(--bad)">incertaine</b>'}) : <b>vérifiez</b> avant d’enregistrer.`:'Rien de fiable détecté'+(j.source?' (lu par '+esc(j.source)+')':'')+(j.diag&&j.diag.length?' – '+esc(j.diag.join(' | ')):'')+'. Saisissez les montants à la main.')+(c?'':(j.ices.length?' Fournisseur inconnu (ICE '+j.ices[0]+') : créez-le dans Contacts.':''));
@@ -479,7 +483,7 @@ function vBud(){
    <div class="card kpi"><div class="l">Engagé à ce jour</div><div class="v">${MAD(k.engTot)}</div><div class="s">${k.budTot?Math.round(k.engTot/k.budTot*100):0} % du budget</div></div>
    <div class="card kpi"><div class="l">Reste à engager</div><div class="v">${MAD(k.budTot-k.engTot)}</div></div>
    <div class="card kpi"><div class="l">Ventes potentielles</div><div class="v">${MAD(k.ca)}</div></div>
-   <div class="card kpi"><div class="l">Marge prévisionnelle (tout compris)</div><div class="v" style="color:${marge<0?'var(--bad)':'var(--ok)'}">${MAD(marge)}</div><div class="s">${k.ca?Math.round(marge/k.ca*1000)/10:0} % du CA</div></div>
+   <div class="card kpi"><div class="l">Marge prévisionnelle (tout compris)</div><div class="v" style="color:${marge<0?'var(--bad)':'var(--ok)'}">${MAD(marge)}</div><div class="s">${k.ca?dec(Math.round(marge/k.ca*1000)/10):0} % du CA</div></div>
    <div class="card kpi"><div class="l">Marge hors prix non déclaré</div><div class="v" style="color:${marge2<0?'var(--bad)':'var(--ok)'}">${MAD(marge2)}</div><div class="s">Si les ${m0(noir)} MAD non déclarés sont exclus</div></div></div>
   </div>
   <div class="tw"><table><thead><tr><th>Catégorie</th><th class="num">Budget</th><th class="num">Engagé</th><th class="num">Payé</th><th class="num">Écart</th><th style="width:160px">Avancement</th><th>Note</th></tr></thead><tbody>

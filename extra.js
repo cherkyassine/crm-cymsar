@@ -264,7 +264,7 @@ function simCalc(){
   document.getElementById('svp').textContent=(p>0?'+':'')+p+' %';document.getElementById('svc').textContent=(c>0?'+':'')+c+' %';
   const r=C.tvaVente/100,ca=k.ca*(1+p/100),caHT=C.venteTTC?ca/(1+r):ca,cout=k.budTot*(1+c/100),marge=caHT-cout,surf=sum(S.lots,l=>l.surface);
   const be=(cout*(C.venteTTC?(1+r):1))/surf;
-  document.getElementById('simout').innerHTML=`<div class="grid kpis">${tile('CA HT',MAD(caHT))}${tile('Coûts',MAD(cout))}${tile('Marge',MAD(marge),caHT?Math.round(marge/caHT*1000)/10+' % du CA HT':'',marge<0?'color:var(--bad)':'color:var(--ok)')}${tile('Prix de vente d’équilibre',m0(be)+' MAD/m²','Marge nulle',''
+  document.getElementById('simout').innerHTML=`<div class="grid kpis">${tile('CA HT',MAD(caHT))}${tile('Coûts',MAD(cout))}${tile('Marge',MAD(marge),caHT?dec(Math.round(marge/caHT*1000)/10)+' % du CA HT':'',marge<0?'color:var(--bad)':'color:var(--ok)')}${tile('Prix de vente d’équilibre',m0(be)+' MAD/m²','Marge nulle',''
   )}</div>`;
 }
 window.addEventListener('load',()=>{});
