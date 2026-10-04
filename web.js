@@ -148,6 +148,12 @@ window.fetch=async function(input,init){
       res.source=L.source;res.diag=L.diag;res.apercu=String(L.text||'').split(/\r?\n/).filter(Boolean).slice(0,12).join('\n');
       return resp(res);
     }
+    if(path==='/api/fichier'){ // octets d'un fichier du Drive (classeur Excel du budget)
+      const id=fileId(url.searchParams.get('path')||'');if(!id)return resp({error:'fichier introuvable'},404);
+      const f=await gas('lire',{id});if(f.error||!f.b64)return resp({error:f.error||'lecture impossible'},500);
+      const bin=atob(f.b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+      return new Response(u,{status:200,headers:{'Content-Type':f.mime||'application/octet-stream'}});
+    }
     if(path==='/api/upload'&&method==='POST'){
       const kind=url.searchParams.get('kind')==='photo'?'photo':'achat',name=url.searchParams.get('name')||'fichier';
       const file=await reduire(init.body),pr=PROJ.find(x=>x.id===p)||PROJ[0];

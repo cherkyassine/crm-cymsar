@@ -120,6 +120,7 @@ svg text{fill:var(--mute);font-size:11px}
 <script src="extra.js"></script>
 <script src="extra2.js"></script>
 <script src="exports.js"></script>
+<script src="budgetxl.js"></script>
 <script>
 "use strict";
 /* ============ état ============ */
@@ -477,7 +478,7 @@ function vBud(){
   const cats=S.budget.concat(Object.keys(k.eng).filter(c=>!S.budget.find(b=>b.categorie===c)).map(c=>({categorie:c,estime:0,note:'(catégorie hors budget)'})));
   const marge=k.ca-Math.max(k.budTot,0),noir=sum(S.budget.filter(b=>b.categorie.startsWith('Prix non déclaré')),b=>b.estime),marge2=marge+noir;
   return `<div class="top"><div><h1>Budget du projet</h1><p class="sub">Estimations issues de la feuille « Frais_Acquisition_Terrain » du fichier SITUATION BANQUE CYMSAR_2026.xlsx, comparées aux dépenses réelles (factures + terrain + frais bancaires).</p></div>
-  <div class="row"><button class="btn pri" onclick="newBud()">+ Catégorie</button></div></div>
+  <div class="row"><button class="btn" onclick="majBudgetExcel()">⟳ Mise à jour depuis le fichier Excel</button><button class="btn pri" onclick="newBud()">+ Catégorie</button></div></div>
   <div class="grid kpis">
    <div class="card kpi"><div class="l">Budget prévisionnel</div><div class="v">${MAD(k.budTot)}</div></div>
    <div class="card kpi"><div class="l">Engagé à ce jour</div><div class="v">${MAD(k.engTot)}</div><div class="s">${k.budTot?Math.round(k.engTot/k.budTot*100):0} % du budget</div></div>
