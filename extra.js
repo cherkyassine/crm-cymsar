@@ -160,7 +160,7 @@ function vChan(){
 }
 function chanContrats(){
   if(!S.contrats.length)return '<div class="card empty">Aucun contrat d’entreprise. Ajoutez vos marchés (gros œuvre, plomberie, électricité…) pour suivre situations et retenues.</div>';
-  const rows=S.contrats.map(c=>{const ttc=c.ht*(1+c.tva/100),fact=sum(c.situations,s=>sitTTC(c,s)),paye=sum(c.situations.filter(s=>s.paye),s=>sitTTC(c,s)-sitRet(c,s)),ret=sum(c.situations,s=>sitRet(c,s));return {c,ttc,fact,paye,ret}});
+  const rows=S.contrats.map(c=>{const ttc=c.ht*(1+c.tva/100),fact=sum(c.situations,s=>sitTTC(c,s)),paye=sum(c.situations.filter(s=>s.paye),s=>Math.max(0,sitNet(c,s)))+Math.min(dedTotal(c),sum(c.situations,s=>sitTTC(c,s))),ret=sum(c.situations,s=>sitRet(c,s));return {c,ttc,fact,paye,ret}});
   return `<div class="grid kpis">${tile('Marchés signés (TTC)',MAD(sum(rows,r=>r.ttc)))}${tile('Situations facturées',MAD(sum(rows,r=>r.fact)))}${tile('Réglé (net de retenue)',MAD(sum(rows,r=>r.paye)))}${tile('Retenues de garantie retenues',MAD(sum(rows,r=>r.ret)),'À libérer après réception')}</div>
   <div class="tw"><table><thead><tr><th>Entreprise</th><th>Objet</th><th class="num">Marché TTC</th><th class="num">Facturé</th><th class="num">%</th><th class="num">Réglé net</th><th class="num">Retenue</th><th class="num">Reste à facturer</th><th>Statut</th></tr></thead><tbody>${rows.map(({c,ttc,fact,paye,ret})=>`<tr class="click" onclick="showContrat('${c.id}')"><td><b>${esc(cn(c.entreprise))}</b></td><td>${esc(c.objet)}</td><td class="num">${m2(ttc)}</td><td class="num">${m2(fact)}</td><td class="num">${ttc?Math.round(fact/ttc*100):0} %</td><td class="num">${m2(paye)}</td><td class="num">${m2(ret)}</td><td class="num">${m2(ttc-fact)}</td><td><span class="chip ${c.statut==='Terminé'?'ok':c.statut==='En cours'?'blue':'gray'}">${esc(c.statut)}</span></td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -170,7 +170,7 @@ function showContrat(id){
   const c=S.contrats.find(x=>x.id===id);if(!c)return;
   const ttc=c.ht*(1+c.tva/100);
   modal.innerHTML=`<div class="dlg wide"><div class="top"><div><h2 style="margin:0">${esc(cn(c.entreprise))}</h2><div class="mute">${esc(c.objet)} · ${MAD(ttc)} TTC · retenue ${c.retenue} %</div></div><div class="row"><button class="btn sm" onclick="closeModal();editContrat('${id}')">Modifier</button><button class="btn sm pri" onclick="closeModal();newSit('${id}')">+ Situation</button><button class="btn sm" onclick="closeModal()">Fermer</button></div></div>
-  <div class="tw" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Situation</th><th class="num">HT</th><th class="num">TTC</th><th class="num">Retenue</th><th class="num">Net à payer</th><th>Statut</th></tr></thead><tbody>${c.situations.map(s=>`<tr class="click" onclick="closeModal();editSit('${id}','${s.id}')"><td>${fd(s.date)}</td><td>${esc(s.libelle)}</td><td class="num">${m2(s.ht)}</td><td class="num">${m2(sitTTC(c,s))}</td><td class="num">${m2(sitRet(c,s))}</td><td class="num"><b>${m2(sitTTC(c,s)-sitRet(c,s))}</b></td><td>${s.paye?`<span class="chip ok">Payée ${fd(s.datePaiement)}</span>`:'<span class="chip bad">À payer</span>'}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Aucune situation.</td></tr>'}</tbody></table></div></div>`;
+  <div class="tw" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Situation</th><th class="num">HT</th><th class="num">TTC</th><th class="num">Retenue</th><th class="num">Matériaux déduits</th><th class="num">Net à payer</th><th>Statut</th></tr></thead><tbody>${(AL=>c.situations.map(s=>`<tr class="click" onclick="closeModal();editSit('${id}','${s.id}')"><td>${fd(s.date)}</td><td>${esc(s.libelle)}</td><td class="num">${m2(s.ht)}</td><td class="num">${m2(sitTTC(c,s))}</td><td class="num">${m2(sitRet(c,s))}</td><td class="num">${AL.m[s.id]?'− '+m2(AL.m[s.id]):''}</td><td class="num"><b>${m2(Math.max(0,sitNet(c,s,AL)))}</b></td><td>${sitNet(c,s,AL)<0.005&&AL.m[s.id]?'<span class="chip blue">Couverte par les matériaux</span>':s.paye?`<span class="chip ok">Payée ${fd(s.datePaiement)}</span>`:'<span class="chip bad">À payer</span>'}</td></tr>`).join(''))(allocDed(c))||'<tr><td colspan="8" class="empty">Aucune situation.</td></tr>'}</tbody></table></div></div>`;
   modal.querySelector('.dlg').insertAdjacentHTML('beforeend',dedBloc(c,ttc));
   modal.classList.add('on');
 }
@@ -178,13 +178,19 @@ function showContrat(id){
 const dedBase=(c,i)=>c.deductBase==='ht'?(+i.ht||0):(+i.ttc||0);
 const dedFactures=c=>(c.facturesDeduites||[]).map(id=>S.invoices.find(i=>i.id===id)).filter(Boolean);
 const dedTotal=c=>sum(dedFactures(c),i=>dedBase(c,i));
+function allocDed(c){ // les matériaux payés par CYMSAR comptent comme paiement à l’entreprise : imputés sur les échéances dans l’ordre
+  let r=dedTotal(c);const m={};
+  c.situations.slice().sort((a,b)=>(a.date||'')<(b.date||'')?-1:(a.date||'')>(b.date||'')?1:0).forEach(s=>{const x=Math.min(r,sitTTC(c,s));m[s.id]=x;r-=x});
+  return {m,surplus:r};
+}
+const sitNet=(c,s,A)=>sitTTC(c,s)-((A||allocDed(c)).m[s.id]||0)-sitRet(c,s);
 function dedBloc(c,ttc){
-  const L=dedFactures(c),tot=dedTotal(c),verse=sum(c.situations.filter(s=>s.paye),s=>sitTTC(c,s)),du=ttc-tot;
+  const L=dedFactures(c),tot=dedTotal(c),A=allocDed(c),verse=sum(c.situations.filter(s=>s.paye),s=>Math.max(0,sitNet(c,s,A))),du=ttc-tot;
   return '<h3 style="margin:18px 0 6px">Matériaux achetés directement, déduits du marché</h3>'+
   '<p class="small mute" style="margin:0 0 8px">Choisissez les factures que CYMSAR a payées à la place de l’entreprise : leur total est déduit de ce qui lui reste dû ('+(c.deductBase==='ht'?'montant HT':'montant TTC')+' des factures).</p>'+
   '<div class="row" style="margin-bottom:8px"><button class="btn sm pri" onclick="pickDeduct(\''+c.id+'\')">Choisir les factures…</button></div>'+
   (L.length?'<div class="tw"><table><thead><tr><th>Facture</th><th>Fournisseur</th><th>Date</th><th>Désignation</th><th class="num">Déduit</th></tr></thead><tbody>'+L.map(i=>'<tr><td><b>'+esc(FA(i.id))+'</b></td><td>'+esc(cn(i.fournisseur))+'</td><td>'+fd(i.date)+'</td><td class="small">'+esc(i.designation||'')+'</td><td class="num">'+m2(dedBase(c,i))+'</td></tr>').join('')+'</tbody><tfoot><tr><td colspan="4">Total déduit ('+L.length+' facture'+(L.length>1?'s':'')+')</td><td class="num"><b>'+m2(tot)+'</b></td></tr></tfoot></table></div>':'<div class="small mute">Aucune facture choisie.</div>')+
-  '<div class="grid kpis" style="margin-top:12px">'+tile('Marché TTC',MAD(ttc))+tile('− Matériaux payés par CYMSAR',MAD(tot))+tile('= Net dû à l’entreprise',MAD(du))+tile('Déjà versé (situations réglées)',MAD(verse))+tile('Reste à payer à l’entreprise',MAD(du-verse),du-verse<0?'Trop versé':'')+'</div>';
+  '<div class="grid kpis" style="margin-top:12px">'+tile('Marché TTC',MAD(ttc))+tile('− Matériaux payés par CYMSAR',MAD(tot))+tile('= Net dû à l’entreprise',MAD(du))+tile('Déjà versé en espèces/virement',MAD(verse),'Échéances réglées, nettes des matériaux')+tile('Reste à payer à l’entreprise',MAD(sum(c.situations.filter(s=>!s.paye),s=>Math.max(0,sitNet(c,s,A)))),A.surplus>0.005?'Matériaux au-delà des échéances : '+m2(A.surplus):'')+'</div>';
 }
 function pickDeduct(id){
   const c=S.contrats.find(x=>x.id===id);if(!c)return;
