@@ -87,7 +87,7 @@ function checks(){
     if(!i.fichier)add('warn',`${i.id} : aucun fichier de facture rattaché.`,'inv');
     const age=dDiff(today(),i.date);
     if(i.ttc-i.paye>0.005&&age>30)add('warn',`${i.id} (${cn(i.fournisseur)}) impayée depuis ${age} jours : ${m2(i.ttc-i.paye)} MAD.`,'inv');
-    if(i.refBanque&&i.mode!=='Caisse'&&!S.bank.find(b=>String(b.n)===String(i.refBanque)))add('warn',`${i.id} : ligne bancaire n°${i.refBanque} introuvable.`,'bank');
+    if(i.refBanque&&i.mode!=='Caisse'&&!S.bank.find(b=>String(b.n)===String(i.refBanque)))add('warn',`${FA(i.id)} : ligne bancaire n°${i.refBanque} introuvable.`,'bank');
   });
   S.bank.forEach(b=>{
     if(b.debit>0&&(b.factures||[]).length){
@@ -113,7 +113,7 @@ function controlsBox(){
 /* ================= TRÉSORERIE PRÉVUE ================= */
 function tresoEvents(){
   const ev=[],t0=today();
-  S.invoices.forEach(i=>{const r=i.ttc-i.paye;if(r>0.005)ev.push({d:dMax(dAdd(i.date,30),t0),l:`Facture ${i.id} · ${cn(i.fournisseur)}`,m:-r,src:'facture'})});
+  S.invoices.forEach(i=>{const r=i.ttc-i.paye;if(r>0.005)ev.push({d:dMax(dAdd(i.date,30),t0),l:`Facture ${FA(i.id)} · ${cn(i.fournisseur)}`,m:-r,src:'facture'})});
   S.contrats.forEach(c=>c.situations.forEach(s=>{if(!s.paye){const net=sitTTC(c,s)-sitRet(c,s);ev.push({d:dMax(dAdd(s.date,30),t0),l:`Situation ${cn(c.entreprise)} · ${s.libelle||''}`,m:-net,src:'contrat'})}}));
   S.lots.forEach(l=>(l.echeances||[]).filter(e=>!e.recu).forEach(e=>ev.push({d:e.date<t0?t0:e.date,l:`Acheteur · ${l.nom} · ${e.libelle||''}`,m:+e.montant,src:'vente'})));
   S.previsions.filter(p=>p.statut!=='Réalisé').forEach(p=>ev.push({d:p.date<t0?t0:p.date,l:p.libelle,m:p.sens==='entree'?+p.montant:-p.montant,src:'manuel',id:p.id}));

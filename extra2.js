@@ -152,7 +152,7 @@ function reconBox(){
   const orph=S.bank.filter(b=>b.debit>0&&!(b.factures||[]).length&&b.type==='depense'&&!b.categorie);
   if(!top.length&&!orph.length)return '';
   return `<div class="card" style="margin-bottom:12px"><h3>Rapprochement bancaire automatique</h3>
-  ${top.map(s=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${fd(s.b.date)} · <b>${esc(s.b.label.slice(0,45))}</b> · ${m2(s.b.debit)} <span class="mute">↔</span> ${s.set.map(i=>`<span class="chip blue">${i.id}</span> ${esc(cn(i.fournisseur))}`).join(' + ')} <span class="chip ${s.sc>=90?'ok':'warn'}">${s.sc>=90?'très probable':'à vérifier'}</span></span><button class="btn sm pri" onclick="acceptMatch(${s.b.n},'${s.set.map(i=>i.id).join(',')}')">Accepter</button></div>`).join('')||'<div class="small mute">Aucune correspondance automatique trouvée.</div>'}
+  ${top.map(s=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span class="small">${fd(s.b.date)} · <b>${esc(s.b.label.slice(0,45))}</b> · ${m2(s.b.debit)} <span class="mute">↔</span> ${s.set.map(i=>`<span class="chip blue">${FA(i.id)}</span> ${esc(cn(i.fournisseur))}`).join(' + ')} <span class="chip ${s.sc>=90?'ok':'warn'}">${s.sc>=90?'très probable':'à vérifier'}</span></span><button class="btn sm pri" onclick="acceptMatch(${s.b.n},'${s.set.map(i=>i.id).join(',')}')">Accepter</button></div>`).join('')||'<div class="small mute">Aucune correspondance automatique trouvée.</div>'}
   ${orph.length>top.length?`<div class="small mute" style="margin-top:8px">${orph.length-top.length} opération(s) sans facture restent à affecter à la main (cliquez la ligne dans le relevé).</div>`:''}</div>`;
 }
 function acceptMatch(n,ids){
@@ -239,7 +239,7 @@ function runSearch(raw){
   if(q.length<2){gr.innerHTML='<div class="small mute">Tapez au moins 2 caractères.</div>';return}
   const has=(...a)=>normS(a.join(' ')).includes(q);
   const G=[
-   ['Factures',S.invoices.filter(i=>has(i.id,i.numero,i.designation,cn(i.fournisseur),i.categorie,i.ttc)).map(i=>[i.id+' · '+cn(i.fournisseur),`${m2(i.ttc)} MAD · ${fd(i.date)}`,`closeModal();editInvoice('${i.id}')`])],
+   ['Factures',S.invoices.filter(i=>has(i.id,i.numero,i.designation,cn(i.fournisseur),i.categorie,i.ttc)).map(i=>[FA(i.id)+' · '+cn(i.fournisseur),`${m2(i.ttc)} MAD · ${fd(i.date)}`,`closeModal();editInvoice('${i.id}')`])],
    ['Contacts',S.contacts.filter(c=>has(c.nom,c.type,c.tel,c.email,c.ice,c.notes)).map(c=>[c.nom,c.type,`closeModal();showContact('${c.id}')`])],
    ['Documents',S.docs.filter(d=>has(d.titre,d.chemin,d.categorie)).map(d=>[d.titre,d.categorie,`window.open(FURL('${d.chemin.replace(/'/g,"\\'")}'),'_blank')`])],
    ['Banque',S.bank.filter(b=>has(b.label,b.note,b.categorie,b.debit,b.credit)).map(b=>[b.label.slice(0,60),`${fd(b.date)} · ${m2(b.debit||b.credit)}`,`closeModal();UI.bq='${b.label.slice(0,20).replace(/'/g,"\\'")}';location.hash='bank';render()`])],
