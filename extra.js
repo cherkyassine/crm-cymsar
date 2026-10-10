@@ -171,7 +171,42 @@ function showContrat(id){
   const ttc=c.ht*(1+c.tva/100);
   modal.innerHTML=`<div class="dlg wide"><div class="top"><div><h2 style="margin:0">${esc(cn(c.entreprise))}</h2><div class="mute">${esc(c.objet)} · ${MAD(ttc)} TTC · retenue ${c.retenue} %</div></div><div class="row"><button class="btn sm" onclick="closeModal();editContrat('${id}')">Modifier</button><button class="btn sm pri" onclick="closeModal();newSit('${id}')">+ Situation</button><button class="btn sm" onclick="closeModal()">Fermer</button></div></div>
   <div class="tw" style="margin-top:12px"><table><thead><tr><th>Date</th><th>Situation</th><th class="num">HT</th><th class="num">TTC</th><th class="num">Retenue</th><th class="num">Net à payer</th><th>Statut</th></tr></thead><tbody>${c.situations.map(s=>`<tr class="click" onclick="closeModal();editSit('${id}','${s.id}')"><td>${fd(s.date)}</td><td>${esc(s.libelle)}</td><td class="num">${m2(s.ht)}</td><td class="num">${m2(sitTTC(c,s))}</td><td class="num">${m2(sitRet(c,s))}</td><td class="num"><b>${m2(sitTTC(c,s)-sitRet(c,s))}</b></td><td>${s.paye?`<span class="chip ok">Payée ${fd(s.datePaiement)}</span>`:'<span class="chip bad">À payer</span>'}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Aucune situation.</td></tr>'}</tbody></table></div></div>`;
+  modal.querySelector('.dlg').insertAdjacentHTML('beforeend',dedBloc(c,ttc));
   modal.classList.add('on');
+}
+/* ---- matériaux achetés en direct par CYMSAR : factures déduites du marché ---- */
+const dedBase=(c,i)=>c.deductBase==='ht'?(+i.ht||0):(+i.ttc||0);
+const dedFactures=c=>(c.facturesDeduites||[]).map(id=>S.invoices.find(i=>i.id===id)).filter(Boolean);
+const dedTotal=c=>sum(dedFactures(c),i=>dedBase(c,i));
+function dedBloc(c,ttc){
+  const L=dedFactures(c),tot=dedTotal(c),verse=sum(c.situations.filter(s=>s.paye),s=>sitTTC(c,s)),du=ttc-tot;
+  return '<h3 style="margin:18px 0 6px">Matériaux achetés directement, déduits du marché</h3>'+
+  '<p class="small mute" style="margin:0 0 8px">Choisissez les factures que CYMSAR a payées à la place de l’entreprise : leur total est déduit de ce qui lui reste dû ('+(c.deductBase==='ht'?'montant HT':'montant TTC')+' des factures).</p>'+
+  '<div class="row" style="margin-bottom:8px"><button class="btn sm pri" onclick="pickDeduct(\''+c.id+'\')">Choisir les factures…</button></div>'+
+  (L.length?'<div class="tw"><table><thead><tr><th>Facture</th><th>Fournisseur</th><th>Date</th><th>Désignation</th><th class="num">Déduit</th></tr></thead><tbody>'+L.map(i=>'<tr><td><b>'+esc(FA(i.id))+'</b></td><td>'+esc(cn(i.fournisseur))+'</td><td>'+fd(i.date)+'</td><td class="small">'+esc(i.designation||'')+'</td><td class="num">'+m2(dedBase(c,i))+'</td></tr>').join('')+'</tbody><tfoot><tr><td colspan="4">Total déduit ('+L.length+' facture'+(L.length>1?'s':'')+')</td><td class="num"><b>'+m2(tot)+'</b></td></tr></tfoot></table></div>':'<div class="small mute">Aucune facture choisie.</div>')+
+  '<div class="grid kpis" style="margin-top:12px">'+tile('Marché TTC',MAD(ttc))+tile('− Matériaux payés par CYMSAR',MAD(tot))+tile('= Net dû à l’entreprise',MAD(du))+tile('Déjà versé (situations réglées)',MAD(verse))+tile('Reste à payer à l’entreprise',MAD(du-verse),du-verse<0?'Trop versé':'')+'</div>';
+}
+function pickDeduct(id){
+  const c=S.contrats.find(x=>x.id===id);if(!c)return;
+  const sel=new Set(c.facturesDeduites||[]);
+  const L=S.invoices.slice().sort((a,b)=>(+(b.categorie==='Gros œuvre')-+(a.categorie==='Gros œuvre'))||(a.id<b.id?-1:1));
+  modal.innerHTML='<div class="dlg wide"><h2>Factures déduites du marché — '+esc(cn(c.entreprise))+'</h2>'+
+  '<div class="row" style="margin-bottom:8px"><input type="search" id="dq" placeholder="Rechercher…" style="flex:1"><select id="dbase"><option value="ttc">Déduire le TTC</option><option value="ht"'+(c.deductBase==='ht'?' selected':'')+'>Déduire le HT</option></select></div>'+
+  '<div class="row" style="margin-bottom:8px"><button type="button" class="btn sm" id="dgo">Cocher toutes les factures « Gros œuvre »</button><button type="button" class="btn sm" id="dno">Tout décocher</button><span class="small mute" id="dsum"></span></div>'+
+  '<div id="dl" style="max-height:55vh;overflow:auto"></div><div class="acts"><button type="button" class="btn" id="dx">Annuler</button><button type="button" class="btn pri" id="dok">Enregistrer</button></div></div>';
+  modal.classList.add('on');
+  const draw=()=>{
+    const q=modal.querySelector('#dq').value.toLowerCase(),base=modal.querySelector('#dbase').value;
+    modal.querySelector('#dl').innerHTML=L.filter(i=>!q||(FA(i.id)+' '+i.numero+' '+i.designation+' '+cn(i.fournisseur)+' '+i.categorie).toLowerCase().includes(q)).map(i=>'<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" data-id="'+esc(i.id)+'" '+(sel.has(i.id)?'checked':'')+' style="margin-top:4px"><span style="flex:1"><b>'+esc(FA(i.id))+'</b> · '+esc(cn(i.fournisseur))+' · '+fd(i.date)+' <span class="chip gray">'+esc(i.categorie||'')+'</span><span class="small mute" style="display:block">'+esc(i.designation||'')+'</span></span><span class="num">'+m2(base==='ht'?i.ht:i.ttc)+'</span></label>').join('');
+    modal.querySelectorAll('#dl input').forEach(x=>x.onchange=()=>{x.checked?sel.add(x.dataset.id):sel.delete(x.dataset.id);tot()});tot();
+  };
+  const tot=()=>{const base=modal.querySelector('#dbase').value;modal.querySelector('#dsum').textContent=sel.size+' facture(s) · '+m2(sum([...sel].map(i=>S.invoices.find(x=>x.id===i)).filter(Boolean),i=>base==='ht'?(+i.ht||0):(+i.ttc||0)))+' MAD'};
+  modal.querySelector('#dq').oninput=draw;modal.querySelector('#dbase').onchange=draw;
+  modal.querySelector('#dgo').onclick=()=>{S.invoices.filter(i=>i.categorie==='Gros œuvre').forEach(i=>sel.add(i.id));draw()};
+  modal.querySelector('#dno').onclick=()=>{sel.clear();draw()};
+  modal.querySelector('#dx').onclick=()=>showContrat(id);
+  modal.querySelector('#dok').onclick=()=>{c.facturesDeduites=[...sel];c.deductBase=modal.querySelector('#dbase').value;save();showContrat(id)};
+  draw();
 }
 function editContrat(id){const c=S.contrats.find(x=>x.id===id);openForm({title:'Contrat',fields:CONTF(),data:c,onSave:o=>Object.assign(c,o),onDelete:()=>{S.contrats=S.contrats.filter(x=>x!==c)}});}
 const SITF=()=>[{k:'date',l:'Date',t:'date',req:1},{k:'libelle',l:'Libellé (ex. Situation n°1)',t:'text',req:1,full:1},{k:'ht',l:'Montant HT de la situation',t:'number'},{k:'paye',l:'Réglée ?',t:'select',o:[['','Non'],['1','Oui']]},{k:'datePaiement',l:'Date de règlement',t:'date'}];
@@ -406,6 +441,10 @@ const VERIFS={
   lotsRenseignes:{l:'Lots renseignés (niveau et prix) et au moins 1 prospect actif',f:()=>{
     const bad=S.lots.filter(l=>!l.niveau||!(l.prixM2>0));
     const np=S.prospects.filter(p=>p.statut!=='Perdu').length,d=[];if(bad.length)d.push('niveau à renseigner : '+bad.map(l=>l.nom).join(', '));if(!np)d.push('aucun prospect actif');return {ok:!d.length,detail:d.join(' ; ')||'lots renseignés, '+np+' prospect(s) actif(s)'}}},
+  facturesCompletes:{l:'Factures complétées : n°, date, montant et fichier (param. : n° internes)',f:p=>{
+    const bad=[];listOf(p,',').forEach(id=>{const i=S.invoices.find(x=>x.id===id);if(!i){bad.push(id+' (absente)');return}
+      const m=[];if(!i.numero)m.push('n° fournisseur');if(!i.date)m.push('date');if(!(i.ht>0))m.push('HT');if(!i.fichier)m.push('fichier');if(m.length)bad.push(id+' : '+m.join(', '))});
+    return {ok:!bad.length,detail:bad.length?'à compléter – '+bad.join(' ; '):'toutes complètes'}}},
   aucuneAlerte:{l:'Plus aucune alerte de contrôle sur un mot (param. : mot, ex. A-025)',f:p=>{
     const bad=checks().filter(c=>c.msg.includes(p));return {ok:!bad.length,detail:bad.length?bad.length+' alerte(s) restante(s)':'aucune alerte'}}}
 };
@@ -422,6 +461,23 @@ function autoTasks(){
     if(r&&r.ok){t.statut='Fait';t.autoFait=today();ch=true}
   });
   if(ch)save();
+}
+async function verifierTaches(){ // relit le dossier, relance toutes les vérifications et affiche le résultat
+  flash('Vérification des tâches…');
+  try{await loadScan()}catch(_){}
+  const L=[];let n=0;
+  S.tasks.forEach(t=>{
+    const r=taskResult(t);
+    if(r===undefined)L.push({t,s:'manuel',d:'Pas de vérification automatique : à cocher à la main.'});
+    else if(r===null)L.push({t,s:'impossible',d:'Vérification impossible (connexion au Drive).'});
+    else if(r.ok){if(t.statut!=='Fait'){t.statut='Fait';t.autoFait=today();n++}L.push({t,s:'ok',d:r.detail,neuf:t.autoFait===today()&&n>0})}
+    else L.push({t,s:t.statut==='Fait'?'incoherent':'attente',d:r.detail});
+  });
+  if(n)save();
+  const ic={ok:'✅',attente:'⏳',incoherent:'⚠️',manuel:'✋',impossible:'❓'};
+  const ord={incoherent:0,attente:1,impossible:2,manuel:3,ok:4};L.sort((a,b)=>ord[a.s]-ord[b.s]);
+  modal.innerHTML='<div class="dlg wide"><h2>Résultat de la vérification</h2><p class="small mute">'+n+' tâche(s) terminée(s) automatiquement · '+L.filter(x=>x.s==='attente').length+' en attente · '+L.filter(x=>x.s==='incoherent').length+' cochée(s) mais non vérifiée(s)</p>'+L.map(x=>'<div style="padding:8px 0;border-bottom:1px solid var(--line)">'+ic[x.s]+' <b>'+esc(x.t.titre)+'</b><div class="small mute">'+esc(x.d)+'</div></div>').join('')+'<div class="acts"><button class="btn pri" onclick="closeModal();render()">Fermer</button></div></div>';
+  modal.classList.add('on');
 }
 function taskBadge(t){
   const r=taskResult(t);
