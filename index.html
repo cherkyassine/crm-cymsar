@@ -657,7 +657,7 @@ function vTask(){
   const open=S.tasks.filter(t=>t.statut!=='Fait').sort((a,b)=>(ord[a.priorite]-ord[b.priorite])||((a.echeance||'9')<(b.echeance||'9')?-1:1));
   const done=S.tasks.filter(t=>t.statut==='Fait');
   const row=t=>`<div class="task ${t.statut==='Fait'?'done':''}"><input type="checkbox" ${t.statut==='Fait'?'checked':''} onchange="toggleTask('${t.id}')"><div style="flex:1;cursor:pointer" onclick="editTask('${t.id}')"><div class="t"><b>${esc(t.titre)}</b></div><div class="small mute">${t.echeance?`<span style="color:${t.echeance<today()&&t.statut!=='Fait'?'var(--bad)':'inherit'}">Échéance ${fd(t.echeance)}</span> · `:''}<span class="chip ${t.priorite==='Haute'?'bad':t.priorite==='Moyenne'?'warn':'gray'}">${t.priorite}</span> ${taskBadge(t)} ${t.lien?`<span class="chip gray">${esc(t.lien)}</span>`:''}${t.notes?`<div>${esc(t.notes)}</div>`:''}</div></div></div>`;
-  return `<div class="top"><div><h1>Tâches</h1><p class="sub">${open.length} ouverte(s) · ${done.length} terminée(s)</p></div><div class="row"><button class="btn pri" onclick="newTask()">+ Tâche</button></div></div>
+  return `<div class="top"><div><h1>Tâches</h1><p class="sub">${open.length} ouverte(s) · ${done.length} terminée(s)</p></div><div class="row"><button class="btn" onclick="verifierTaches()">✔ Vérifier les tâches</button><button class="btn pri" onclick="newTask()">+ Tâche</button></div></div>
   <div class="card">${open.map(row).join('')||'<div class="empty">Rien à faire 🎉</div>'}</div>
   ${done.length?`<h3 class="mute" style="margin:20px 0 8px">Terminées</h3><div class="card">${done.map(row).join('')}</div>`:''}`;
 }
@@ -860,7 +860,7 @@ function editSoc(){openForm({title:'Société',fields:SOCF,wide:1,data:S.societe
 function editPrj(){openForm({title:'Projet',fields:PRJF,wide:1,data:S.projet,onSave:o=>Object.assign(S.projet,o)})}
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:type||'application/json'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
 function exportJSON(){download('crm_cymsar_'+today()+'.json',JSON.stringify(S,null,1))}
-function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.invoices)throw 0;if(confirm('Remplacer toutes les données actuelles par ce fichier ?')){S=d;save();render()}}catch(e){alert('Fichier invalide.')}};r.readAsText(f)}
+function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(d._info||!d.invoices||!d.contacts||!d.budget){alert('Ce fichier est un fichier d’AJOUT (il ne contient pas toutes les données).\nNe l’utilisez pas ici : utilisez le bouton « Choisir un fichier » de la carte « Ajouter des éléments (fichier JSON) », qui n’écrase rien.');return}if(confirm('ATTENTION : cela REMPLACE toutes les données actuelles par ce fichier.\nContinuer ?')){S=d;save();render()}}catch(e){alert('Fichier invalide.')}};r.readAsText(f)}
 function resetAll(){if(confirm('Revenir aux données initiales ? Vos modifications seront perdues.')){S=JSON.parse(JSON.stringify(window.SEED));save();render()}}
 function setTheme(t){try{t?localStorage.setItem('cymsar_theme',t):localStorage.removeItem('cymsar_theme')}catch(e){}applyTheme()}
 function applyTheme(){let t='';try{t=localStorage.getItem('cymsar_theme')||''}catch(e){}t?document.documentElement.dataset.theme=t:delete document.documentElement.dataset.theme}
