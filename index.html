@@ -315,7 +315,7 @@ function vDash(){
    <div class="card"><h3>Flux bancaires mensuels</h3>${flowChart()}</div>
   </div>
   <div class="grid cols2">
-   <div class="card"><h3>Factures à payer</h3>${unpaid.length?`<table><tbody>${unpaid.map(i=>`<tr class="click" onclick="editInvoice('${i.id}')"><td><b>${esc(i.id)}</b><br><span class="mute small">${fd(i.date)}</span></td><td>${esc(cn(i.fournisseur))}<br><span class="mute small">${esc(i.designation).slice(0,70)}</span></td><td class="num"><b>${m2(i.ttc-i.paye)}</b></td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2">Total</td><td class="num">${m2(k.reste)}</td></tr></tfoot></table>`:'<div class="empty">Toutes les factures sont réglées.</div>'}</div>
+   <div class="card"><h3>Factures à payer</h3>${unpaid.length?`<table><tbody>${unpaid.map(i=>`<tr class="click" onclick="editInvoice('${i.id}')"><td><b>${esc(FA(i.id))}</b><br><span class="mute small">${fd(i.date)}</span></td><td>${esc(cn(i.fournisseur))}<br><span class="mute small">${esc(i.designation).slice(0,70)}</span></td><td class="num"><b>${m2(i.ttc-i.paye)}</b></td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2">Total</td><td class="num">${m2(k.reste)}</td></tr></tfoot></table>`:'<div class="empty">Toutes les factures sont réglées.</div>'}</div>
    <div class="card"><h3>Alertes & tâches</h3>
      ${over.map(b=>`<div class="banner" style="background:var(--bad-soft);color:var(--bad)">Dépassement budget « ${esc(b.categorie)} » : ${m0(k.eng[b.categorie])} engagés pour ${m0(b.estime)} prévus.</div>`).join('')}
      ${openTasks.length?openTasks.map(t=>`<div class="task"><div style="flex:1"><div class="t"><b>${esc(t.titre)}</b></div><div class="small mute">${t.echeance?'Échéance '+fd(t.echeance)+' · ':''}<span class="chip ${t.priorite==='Haute'?'bad':t.priorite==='Moyenne'?'warn':'gray'}">${esc(t.priorite)}</span> ${taskBadge(t)}</div></div></div>`).join(''):'<div class="empty">Aucune tâche ouverte.</div>'}
@@ -347,7 +347,7 @@ function flowChart(){
 
 /* ============ FACTURES ============ */
 const INVF=()=>[
- {k:'id',l:'N° interne',t:'text',req:1},
+ {k:'id',l:'N° interne (A-001 ; affiché « FA A-001 »)',t:'text',req:1},
  {k:'date',l:'Date de facture',t:'date',req:1},
  {k:'fournisseur',l:'Fournisseur',t:'select',o:contactOpts,req:1},
  {k:'numero',l:'N° de facture du fournisseur',t:'text'},
@@ -363,6 +363,7 @@ const INVF=()=>[
  {k:'fichier',l:'Fichier (chemin relatif au dossier CYMSAR)',t:'text',full:1},
  {k:'notes',l:'Notes',t:'area',full:1},
 ];
+const FA=id=>/^A-\d+$/.test(String(id))?'FA '+id:id; // affichage : « FA A-001 », comme les noms de fichiers
 function nextInvId(){const n=Math.max(0,...S.invoices.map(i=>+(i.id.match(/(\d+)$/)||[0,0])[1]));return 'A-'+String(n+1).padStart(3,'0')}
 const ocrBtn=()=>SERVER?'<div class="row" style="margin-top:12px"><button type="button" class="btn sm" onclick="ocrFill()">🔍 Lire la facture (OCR)</button><span id="ocrst" class="small mute"></span></div>':'';
 async function pickDriveFile(){ // liste les fichiers déjà présents dans le Drive CYMSAR et laisse en choisir un
@@ -440,7 +441,7 @@ function editInvoice(id){
 }
 function vInv(){
   const f=UI.inv,q=f.q.toLowerCase();
-  const rows=S.invoices.filter(i=>(!f.st||statInv(i)[0]===f.st)&&(!f.cat||i.categorie===f.cat)&&(!f.f||i.fournisseur===f.f)&&(!q||(i.id+' '+i.numero+' '+i.designation+' '+cn(i.fournisseur)+' '+i.categorie).toLowerCase().includes(q)))
+  const rows=S.invoices.filter(i=>(!f.st||statInv(i)[0]===f.st)&&(!f.cat||i.categorie===f.cat)&&(!f.f||i.fournisseur===f.f)&&(!q||(FA(i.id)+' '+i.numero+' '+i.designation+' '+cn(i.fournisseur)+' '+i.categorie).toLowerCase().includes(q)))
     .sort((a,b)=>a.id<b.id?-1:1);
   const fo=[...new Set(S.invoices.map(i=>i.fournisseur))];
   return `<div class="top"><div><h1>Factures d’achat</h1><p class="sub">${S.invoices.length} factures · ${MAD(sum(S.invoices,i=>i.ttc))} TTC · ${MAD(sum(S.invoices,i=>i.ttc-i.paye))} restant à payer</p></div>
@@ -456,13 +457,13 @@ function vInv(){
 }
 function refreshInv(el){ // garde le focus du champ de recherche
   const f=UI.inv,q=f.q.toLowerCase();
-  const rows=S.invoices.filter(i=>(!f.st||statInv(i)[0]===f.st)&&(!f.cat||i.categorie===f.cat)&&(!f.f||i.fournisseur===f.f)&&(!q||(i.id+' '+i.numero+' '+i.designation+' '+cn(i.fournisseur)+' '+i.categorie).toLowerCase().includes(q))).sort((a,b)=>a.id<b.id?-1:1);
+  const rows=S.invoices.filter(i=>(!f.st||statInv(i)[0]===f.st)&&(!f.cat||i.categorie===f.cat)&&(!f.f||i.fournisseur===f.f)&&(!q||(FA(i.id)+' '+i.numero+' '+i.designation+' '+cn(i.fournisseur)+' '+i.categorie).toLowerCase().includes(q))).sort((a,b)=>a.id<b.id?-1:1);
   document.getElementById('invtw').innerHTML=invTable(rows);
 }
 function invTable(rows){
   if(!rows.length)return '<div class="empty">Aucune facture ne correspond.</div>';
   return `<table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>N° facture</th><th>Catégorie</th><th class="num">HT</th><th class="num">TVA</th><th class="num">TTC</th><th>Statut</th><th>Paiement</th><th></th></tr></thead><tbody>
-  ${rows.map(i=>{const [s,c]=statInv(i);return `<tr class="click" onclick="editInvoice('${i.id}')"><td><b>${esc(i.id)}</b></td><td>${fd(i.date)}</td><td>${esc(cn(i.fournisseur))}<div class="mute small">${esc(i.designation).slice(0,80)}</div></td><td>${esc(i.numero)}</td><td>${esc(i.categorie)}</td><td class="num">${m2(i.ht)}</td><td class="num">${m2(i.tva)}</td><td class="num"><b>${m2(i.ttc)}</b></td><td><span class="chip ${c}">${s}</span></td><td class="small">${esc(i.mode||'')}<br>${fd(i.datePaiement)}</td><td>${i.fichier?`<a href="${FURL(i.fichier)}" target="_blank" onclick="event.stopPropagation()" title="Ouvrir le fichier">📎</a>`:''}</td></tr>`}).join('')}
+  ${rows.map(i=>{const [s,c]=statInv(i);return `<tr class="click" onclick="editInvoice('${i.id}')"><td><b>${esc(FA(i.id))}</b></td><td>${fd(i.date)}</td><td>${esc(cn(i.fournisseur))}<div class="mute small">${esc(i.designation).slice(0,80)}</div></td><td>${esc(i.numero)}</td><td>${esc(i.categorie)}</td><td class="num">${m2(i.ht)}</td><td class="num">${m2(i.tva)}</td><td class="num"><b>${m2(i.ttc)}</b></td><td><span class="chip ${c}">${s}</span></td><td class="small">${esc(i.mode||'')}<br>${fd(i.datePaiement)}</td><td>${i.fichier?`<a href="${FURL(i.fichier)}" target="_blank" onclick="event.stopPropagation()" title="Ouvrir le fichier">📎</a>`:''}</td></tr>`}).join('')}
   </tbody><tfoot><tr><td colspan="5">Total (${rows.length})</td><td class="num">${m2(sum(rows,i=>i.ht))}</td><td class="num">${m2(sum(rows,i=>i.tva))}</td><td class="num">${m2(sum(rows,i=>i.ttc))}</td><td colspan="3" class="num">Reste ${m2(sum(rows,i=>i.ttc-i.paye))}</td></tr></tfoot></table>`;
 }
 function exportCSV(){
@@ -494,7 +495,7 @@ function vBank(){
   <div class="tabs"><button class="${t==='banque'?'on':''}" onclick="UI.bankTab='banque';render()">Relevé bancaire</button><button class="${t==='caisse'?'on':''}" onclick="UI.bankTab='caisse';render()">Caisse</button></div>
   <div class="tools"><input type="search" placeholder="Rechercher une opération…" value="${esc(UI.bq||'')}" oninput="UI.bq=this.value;rk()"></div>
   <div class="tw"><table><thead><tr><th>N°</th><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Factures</th><th class="num">Débit</th><th class="num">Crédit</th><th class="num">Solde</th></tr></thead><tbody>
-  ${view.map((b,i)=>{return `<tr class="click" onclick="editBank(${b._i})"><td>${b.n??''}</td><td>${fd(b.date)}</td><td>${esc(b.label)}${b.note?`<div class="mute small">${esc(b.note)}</div>`:''}</td><td>${b.categorie?`<span class="chip gray">${esc(b.categorie)}</span>`:''}</td><td>${(b.factures||[]).map(f=>`<span class="chip blue">${esc(f)}</span>`).join(' ')}</td><td class="num">${b.debit?m2(b.debit):''}</td><td class="num">${b.credit?m2(b.credit):''}</td><td class="num">${m2(b.run)}</td></tr>`}).join('')}
+  ${view.map((b,i)=>{return `<tr class="click" onclick="editBank(${b._i})"><td>${b.n??''}</td><td>${fd(b.date)}</td><td>${esc(b.label)}${b.note?`<div class="mute small">${esc(b.note)}</div>`:''}</td><td>${b.categorie?`<span class="chip gray">${esc(b.categorie)}</span>`:''}</td><td>${(b.factures||[]).map(f=>`<span class="chip blue">${esc(FA(f))}</span>`).join(' ')}</td><td class="num">${b.debit?m2(b.debit):''}</td><td class="num">${b.credit?m2(b.credit):''}</td><td class="num">${m2(b.run)}</td></tr>`}).join('')}
   </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${m2(sum(src,b=>b.debit))}</td><td class="num">${m2(sum(src,b=>b.credit))}</td><td class="num">${m2(run)}</td></tr></tfoot></table></div>
   ${t==='banque'?`<h3 style="margin:22px 0 8px" class="mute">Synthèse mensuelle</h3><div class="tw"><table><thead><tr><th>Mois</th><th class="num">Solde début</th><th class="num">Débits</th><th class="num">Crédits</th><th class="num">Solde fin</th></tr></thead><tbody>${synth}</tbody></table></div>`:''}`;
 }
@@ -589,7 +590,7 @@ function showContact(id){
   modal.innerHTML=`<div class="dlg wide"><div class="top"><div><h2 style="margin:0">${esc(c.nom)}</h2><div class="mute">${esc(c.type)}</div></div><div class="row"><button class="btn sm" onclick="closeModal();editContact('${id}')">Modifier</button><button class="btn sm" onclick="closeModal()">Fermer</button></div></div>
   <dl class="dl" style="margin:14px 0">${[['Téléphone',c.tel],['E-mail',c.email],['Adresse',c.adresse],['ICE',c.ice],['IF',c.ifisc],['RC',c.rc],['Notes',c.notes]].filter(x=>x[1]).map(x=>`<dt>${x[0]}</dt><dd>${esc(x[1])}</dd>`).join('')}</dl>
   <h3 class="mute small" style="text-transform:uppercase;letter-spacing:.05em">Factures (${inv.length}) · ${MAD(sum(inv,i=>i.ttc))} · reste ${MAD(sum(inv,i=>i.ttc-i.paye))}</h3>
-  ${inv.length?`<table><tbody>${inv.map(i=>{const [s,cl]=statInv(i);return `<tr class="click" onclick="closeModal();editInvoice('${i.id}')"><td><b>${i.id}</b></td><td>${fd(i.date)}</td><td>${esc(i.designation).slice(0,70)}</td><td class="num">${m2(i.ttc)}</td><td><span class="chip ${cl}">${s}</span></td></tr>`}).join('')}</tbody></table>`:'<div class="mute small">Aucune facture.</div>'}
+  ${inv.length?`<table><tbody>${inv.map(i=>{const [s,cl]=statInv(i);return `<tr class="click" onclick="closeModal();editInvoice('${i.id}')"><td><b>${FA(i.id)}</b></td><td>${fd(i.date)}</td><td>${esc(i.designation).slice(0,70)}</td><td class="num">${m2(i.ttc)}</td><td><span class="chip ${cl}">${s}</span></td></tr>`}).join('')}</tbody></table>`:'<div class="mute small">Aucune facture.</div>'}
   <h3 class="mute small" style="text-transform:uppercase;letter-spacing:.05em;margin-top:18px">Journal de suivi</h3>
   <form id="logf" class="row"><input type="date" name="d" value="${today()}"><select name="t">${optHtml(['Appel','E-mail','Réunion','Visite chantier','Note'],'Appel')}</select><input name="x" placeholder="Compte rendu…" style="flex:1;min-width:200px" required><button class="btn pri sm">Ajouter</button></form>
   <div class="log">${c.log.slice().reverse().map((l,i)=>`<div><b>${fd(l.d)}</b> · <span class="chip gray">${esc(l.t)}</span> <a href="#" class="small" style="color:var(--bad)" onclick="delLog('${id}',${c.log.length-1-i});return false">supprimer</a><br>${esc(l.x)}</div>`).join('')||'<div class="mute small">Aucun échange enregistré.</div>'}</div></div>`;
@@ -714,7 +715,7 @@ function syncBanner(){
 function pendingBox(){
   const p=pendingInvoices();
   if(!p.length)return '';
-  return `<div class="card" style="margin-bottom:12px"><h3>Nouvelles factures détectées dans le dossier (${p.length})</h3>${p.map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span><b>${x.id}</b> · <a href="${FURL(x.path)}" target="_blank">${esc(x.path.split('/').pop())}</a></span><span class="row"><button class="btn sm pri" onclick="newInvoice({id:'${x.id}',fichier:'${esc(x.path).replace(/'/g,"\\'")}'},true)">Saisir</button><button class="btn sm" onclick="ignoreFile('${esc(x.path).replace(/'/g,"\\'")}')">Ignorer</button></span></div>`).join('')}</div>`;
+  return `<div class="card" style="margin-bottom:12px"><h3>Nouvelles factures détectées dans le dossier (${p.length})</h3>${p.map(x=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span><b>${FA(x.id)}</b> · <a href="${FURL(x.path)}" target="_blank">${esc(x.path.split('/').pop())}</a></span><span class="row"><button class="btn sm pri" onclick="newInvoice({id:'${x.id}',fichier:'${esc(x.path).replace(/'/g,"\\'")}'},true)">Saisir</button><button class="btn sm" onclick="ignoreFile('${esc(x.path).replace(/'/g,"\\'")}')">Ignorer</button></span></div>`).join('')}</div>`;
 }
 function newDocsBox(){
   const f=newFiles();
@@ -815,7 +816,7 @@ function vCpt(){
   <h3 class="mute" style="margin:22px 0 8px">TVA et HT par catégorie</h3>
   <div class="tw"><table><thead><tr><th>Catégorie</th><th>Compte suggéré</th><th class="num">HT</th><th class="num">TVA</th><th class="num">TTC</th></tr></thead><tbody>${Object.keys(byCat).map(c=>`<tr><td>${esc(c)}</td><td class="small mute">${esc(compteOf(c))}</td><td class="num">${m2(byCat[c].ht)}</td><td class="num">${m2(byCat[c].tva)}</td><td class="num">${m2(byCat[c].ttc)}</td></tr>`).join('')}</tbody></table></div>
   <h3 class="mute" style="margin:22px 0 8px">Journal des achats</h3>
-  <div class="tw"><table><thead><tr><th>Date</th><th>N°</th><th>Fournisseur</th><th>Compte</th><th class="num">HT</th><th class="num">TVA (3455)</th><th class="num">TTC (4411)</th><th>Paiement</th></tr></thead><tbody>${inv.map(i=>`<tr class="click" onclick="editInvoice('${i.id}')"><td>${fd(i.date)}</td><td>${i.id}</td><td>${esc(cn(i.fournisseur))}</td><td class="small">${esc(compteOf(i.categorie))}</td><td class="num">${m2(i.ht)}</td><td class="num">${m2(i.tva)}</td><td class="num">${m2(i.ttc)}</td><td class="small">${fd(i.datePaiement)}</td></tr>`).join('')}</tbody></table></div>${cptExtra()}`;
+  <div class="tw"><table><thead><tr><th>Date</th><th>N°</th><th>Fournisseur</th><th>Compte</th><th class="num">HT</th><th class="num">TVA (3455)</th><th class="num">TTC (4411)</th><th>Paiement</th></tr></thead><tbody>${inv.map(i=>`<tr class="click" onclick="editInvoice('${i.id}')"><td>${fd(i.date)}</td><td>${FA(i.id)}</td><td>${esc(cn(i.fournisseur))}</td><td class="small">${esc(compteOf(i.categorie))}</td><td class="num">${m2(i.ht)}</td><td class="num">${m2(i.tva)}</td><td class="num">${m2(i.ttc)}</td><td class="small">${fd(i.datePaiement)}</td></tr>`).join('')}</tbody></table></div>${cptExtra()}`;
 }
 function editCompta(){
   openForm({title:'Paramètres comptables',data:{...S.compta,venteTTC:S.compta.venteTTC?'ttc':'ht'},
